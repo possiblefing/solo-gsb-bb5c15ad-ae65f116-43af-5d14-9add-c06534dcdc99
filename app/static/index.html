@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>食品过敏原标签审查台</title>
+<style>
+  :root { --green: #1a7f37; --red: #b42318; --orange: #b54708; --blue: #175cd3; }
+  * { box-sizing: border-box; }
+  body { font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+         margin: 0; background: #f3f5f7; color: #24292f; }
+  header { background: #17457a; color: #fff; padding: 14px 24px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; font-size: 13px; opacity: .85; }
+  main { max-width: 1080px; margin: 0 auto; padding: 18px 16px 60px; }
+  section { background: #fff; border: 1px solid #e2e6ea; border-radius: 10px;
+            padding: 18px 20px; margin-bottom: 18px; }
+  h2 { font-size: 17px; margin: 0 0 12px; color: #17457a; }
+  h3 { font-size: 15px; margin: 14px 0 8px; }
+  label { font-size: 13px; color: #555; display: block; margin: 10px 0 4px; }
+  input[type=text] { width: 100%; padding: 8px 10px; border: 1px solid #c9d1d9;
+                     border-radius: 6px; font-size: 14px; }
+  textarea { width: 100%; padding: 8px 10px; border: 1px solid #c9d1d9; border-radius: 6px;
+             font-size: 14px; font-family: inherit; resize: vertical; }
+  button { background: var(--blue); color: #fff; border: 0; border-radius: 6px;
+           padding: 8px 16px; font-size: 14px; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  button.secondary { background: #57606a; }
+  button.ghost { background: #eef1f4; color: #24292f; border: 1px solid #c9d1d9; }
+  button.danger { background: #d92d20; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 280px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid #e2e6ea; padding: 6px 10px; text-align: left; }
+  th { background: #f6f8fa; }
+  .badge { display: inline-block; background: #e8eef7; color: #17457a;
+           border-radius: 10px; padding: 1px 10px; margin: 2px; font-size: 12.5px; }
+  .badge.own { background: #cdeccd; color: #14532d; font-weight: 600; }
+  .badge.miss { background: #ffd9d6; color: var(--red); font-weight: 600; }
+  .badge.over { background: #ffe9c2; color: var(--orange); font-weight: 600; }
+  .badge.ok { background: #d8f0d8; color: var(--green); }
+  .badge.add { background: #ffd9d6; color: var(--red); }
+  .badge.del { background: #e2e6ea; color: #57606a; text-decoration: line-through; }
+  .tag-unknown { color: var(--orange); font-size: 12px; margin-left: 6px; }
+  .hint { color: #777; font-size: 12.5px; }
+  .warn { color: var(--orange); font-size: 13px; }
+  .error { color: var(--red); font-size: 13px; margin-top: 8px; }
+  ul.tree { line-height: 2; margin: 6px 0; }
+  ul.tree ul { margin-left: 4px; border-left: 2px dashed #d0d7de; padding-left: 18px; }
+  .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+                gap: 4px 10px; margin-top: 6px; }
+  .check-grid label { display: flex; align-items: center; gap: 5px; margin: 0;
+                      font-size: 13.5px; color: #333; cursor: pointer; }
+  .result-block { border-top: 1px dashed #d0d7de; padding-top: 12px; margin-top: 12px; }
+  .hidden { display: none; }
+  .pill { font-size: 12px; border-radius: 10px; padding: 2px 10px; margin-left: 8px; }
+  .pill.red { background: #ffd9d6; color: var(--red); }
+  .pill.green { background: #d8f0d8; color: var(--green); }
+  .pill.gray { background: #eef1f4; color: #57606a; }
+  a.link { color: var(--blue); cursor: pointer; text-decoration: none; }
+  a.link:hover { text-decoration: underline; }
+  .miss-item { margin: 4px 0; }
+  .src-detail { margin: 2px 0 4px; }
+  .src-detail summary { cursor: pointer; color: #777; font-size: 12.5px; }
+  ul.src-paths { margin: 4px 0; padding-left: 20px; line-height: 1.8; }
+  ul.src-paths li { list-style: disc; }
+  .src-arrow { color: #999; margin: 0 2px; }
+  .src-leaf { font-weight: 600; color: var(--red); }
+  .pill.orange { background: #ffedd5; color: var(--orange); }
+  .recheck-bar { border: 1px solid #fdba74; background: #fff7ed;
+                 border-radius: 8px; padding: 10px 14px; margin: 10px 0;
+                 font-size: 13.5px; }
+  .recheck-bar b { color: var(--orange); }
+  .recheck-bar button { margin-left: 10px; padding: 4px 14px; font-size: 13px; }
+  .recheck-panel { border: 1px solid #c9d1d9; border-radius: 8px;
+                   padding: 12px 16px; margin: 10px 0; background: #fafbfc; }
+  .recheck-panel h4 { margin: 10px 0 6px; font-size: 14px; color: #17457a; }
+  .delta-add { color: var(--green); font-weight: 600; }
+  .delta-del { color: var(--red); text-decoration: line-through; }
+  .delta-list { margin: 4px 0; font-size: 13.5px; line-height: 1.9; }
+  .delta-path { margin: 2px 0 2px 18px; font-size: 13px; }
+  .recheck-preview { border-top: 1px dashed #d0d7de; margin-top: 10px;
+                     padding-top: 8px; }
+  /* 供应商方案风险区间 */
+  .badge.nec { background: #cdeccd; color: #14532d; font-weight: 600; }
+  .badge.pos { background: #fef3c7; color: #92600a; border: 1px dashed #d99e2b; }
+  .badge.cmiss { background: #ffd9d6; color: var(--red); font-weight: 600; }
+  .badge.pmiss { background: #ffedd5; color: var(--orange);
+                 border: 1px dashed #ed8936; }
+  .badge.cover { background: #eef1f4; color: #57606a; text-decoration: line-through; }
+  .badge.pover { background: #f8fafc; color: #b54708;
+                 border: 1px dashed #c9d1d9; }
+  .pill.blue { background: #e8eef7; color: #17457a; }
+  .tag-plan { font-size: 12px; margin-left: 6px; color: #92600a; }
+  .src-leaf.potential { color: var(--orange); }
+  .legend { font-size: 12.5px; color: #555; line-height: 2; margin: 4px 0; }
+  /* 共线生产换线排程 */
+  input[type=number] { width: 84px; padding: 5px 8px; border: 1px solid #c9d1d9;
+                       border-radius: 6px; font-size: 13.5px; }
+  .minutes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                  gap: 6px 14px; margin-top: 6px; }
+  .minutes-grid label { display: flex; align-items: center; justify-content: space-between;
+                        gap: 8px; margin: 0; font-size: 13.5px; color: #333; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🥜 食品过敏原标签审查台</h1>
+  <p>解析嵌套子配料配方 · 传播汇总过敏原 · 核对标签遗漏/多报 · 配方版本对比 · 导出审查报告</p>
+</header>
+<main>
+
+<section>
+  <h2>① 原料过敏原字典</h2>
+  <p class="hint">每行一条：<code>原料名：过敏原1，过敏原2</code>（冒号、逗号中英文均可，# 开头为注释）。</p>
+  <textarea id="bulk-text" rows="4" placeholder="小麦粉：麸质谷物&#10;乳清粉：乳&#10;大豆卵磷脂：大豆"></textarea>
+  <div class="toolbar">
+    <button onclick="importBulk()">批量导入字典</button>
+    <button class="ghost" onclick="fillDemo()">填充示例（字典 + 两版配方）</button>
+    <span id="dict-msg" class="hint"></span>
+  </div>
+  <div id="dict-table-wrap" style="margin-top:10px"></div>
+</section>
+
+<section>
+  <h2>② 原料别名</h2>
+  <p class="hint">每行一条 <code>别名：标准名</code>（冒号中英文均可，# 开头为注释），支持任意长度链
+    <code>脱盐乳清：乳清粉</code>、<code>乳清粉：奶粉</code>，审查时解析到<b>最终标准名</b>再查字典；
+    配料树与遗漏来源路径仍显示原料原始名称。整批原子校验：自环、任意长度环、同一别名多目标都会
+    <b>整批拒绝</b>，错误给出冲突行，环给出最短环路。别名<b>仅用于正式审查与字典时效复核</b>，
+    不影响下方两个临时预览。</p>
+  <textarea id="alias-text" rows="4"
+    placeholder="脱盐乳清：乳清粉&#10;浓缩乳清蛋白：乳清粉&#10;whey powder：乳清粉"></textarea>
+  <div class="toolbar">
+    <button onclick="importAliases()">批量保存别名</button>
+    <button class="ghost" onclick="submitAliasPreview()">解析预览（按下方配方 A）</button>
+    <span id="alias-msg" class="hint"></span>
+  </div>
+  <div id="alias-error" class="error" style="white-space:pre-wrap;margin-top:6px"></div>
+  <div id="alias-table-wrap" style="margin-top:10px"></div>
+  <div id="alias-preview-wrap" style="margin-top:10px"></div>
+</section>
+
+<section>
+  <h2>③ 新建标签审查</h2>
+  <label>审查名称</label>
+  <input type="text" id="review-name" placeholder="例如：巧克力饼干 标签审查">
+  <div class="row">
+    <div>
+      <label>配方文本 A（现版 / 必填）—— 括号表示子配料，可多层嵌套</label>
+      <textarea id="text-a" rows="5"
+        placeholder="配料表：小麦粉，白砂糖，巧克力酱（可可脂，奶粉（乳清粉，乳糖），大豆卵磷脂），鸡蛋，食盐"></textarea>
+    </div>
+    <div>
+      <label>配方文本 B（新版 / 选填，用于版本对比）</label>
+      <textarea id="text-b" rows="5"
+        placeholder="配料表：小麦粉，白砂糖，巧克力酱（可可脂，椰子粉），鸡蛋，芝麻酱（芝麻），食盐"></textarea>
+    </div>
+  </div>
+  <label>标签上声明的过敏原（勾选）</label>
+  <div id="declared-box" class="check-grid"></div>
+  <div class="toolbar">
+    <input type="text" id="custom-allergen" placeholder="自定义过敏原" style="max-width:180px">
+    <button class="ghost" onclick="addCustomAllergen()">添加并勾选</button>
+  </div>
+  <div class="toolbar">
+    <button onclick="submitReview()">开始审查</button>
+    <span id="review-msg" class="error"></span>
+  </div>
+</section>
+
+<section>
+  <h2>④ 供应商方案风险区间 <span class="pill gray">临时预览</span></h2>
+  <p class="hint">为配方中的若干原料输入<b>互斥</b>供应商方案：每行一条
+    <code>原料：方案1；方案2</code>，方案内逗号分隔过敏原，空方案写「无」；
+    未覆盖原料沿用上方字典。后端不枚举方案组合，而是在配料树上分别传播
+    <b>必然过敏原（各方案交集）</b>与<b>可能过敏原（各方案并集）</b>，
+    据标签声明区分确定遗漏 / 潜在遗漏 / 确定多报 / 潜在多报。
+    本预览<b>不会</b>写入字典或历史记录。</p>
+  <div class="row">
+    <div>
+      <label>配方文本</label>
+      <textarea id="risk-text" rows="4"
+        placeholder="配料表：小麦粉，巧克力酱（奶粉（乳清粉），可可脂），鸡蛋"></textarea>
+    </div>
+    <div>
+      <label>互斥供应商方案（每行「原料：方案1；方案2」，空方案写「无」）</label>
+      <textarea id="risk-plans" rows="4"
+        placeholder="乳清粉：乳；无&#10;可可脂：无；坚果"></textarea>
+    </div>
+  </div>
+  <label>标签上声明的过敏原（逗号分隔，可留空）</label>
+  <input type="text" id="risk-declared" placeholder="例如：麸质谷物，蛋类，坚果">
+  <div class="toolbar">
+    <button onclick="submitRiskPreview()">预览风险区间</button>
+    <button class="ghost" onclick="fillRiskDemo()">填充风险示例</button>
+    <span id="risk-msg" class="error"></span>
+  </div>
+  <div id="risk-result"></div>
+</section>
+
+<section>
+  <h2>⑤ 配料占比区间顺序校验 <span class="pill gray">临时预览</span></h2>
+  <p class="hint">在每个原料名后标注占比区间：<code>奶粉[8-12%]</code>，单值写
+    <code>食盐[2%]</code>；父配料先标注再跟子配料括号，如
+    <code>巧克力酱[25-60%]（可可脂[10-18%]）</code>。按标签书写顺序校验每组同级配料的
+    <b>占比非递增</b>约束：后端用区间传播（前向收紧上界、后向收紧下界）判断整组可行性，
+    可行时给出每项收紧后的精确可行区间并标出只能取单一边界值的项；不可行时给出
+    最短冲突片段及完整嵌套路径。缺少区间、格式错误、负值、下界大于上界都会定位到
+    具体路径。本预览<b>不会</b>写入审查历史。</p>
+  <label>配方文本（每个原料名后必须带占比区间标注）</label>
+  <textarea id="prop-text" rows="4"
+    placeholder="配料表：小麦粉[40-55%]，巧克力酱[25-60%]（可可脂[10-18%]，奶粉[12-15%]），鸡蛋[5-20%]，食盐[20-30%]"></textarea>
+  <div class="toolbar">
+    <button onclick="submitProportionCheck()">校验占比顺序</button>
+    <button class="ghost" onclick="fillProportionDemo()">填充占比示例</button>
+    <span id="prop-msg" class="error"></span>
+  </div>
+  <div id="prop-result"></div>
+</section>
+
+<section>
+  <h2>⑥ 共线生产换线排程 <span class="pill gray">临时预览</span></h2>
+  <p class="hint">从历史审查记录中勾选 <b>2～10 个</b>产品：系统复用各记录<b>当前配方</b>
+    （两版记录取标签核对对象，即新版配方）的<b>最终过敏原集合</b>；为涉及的每种过敏原配置
+    清洁分钟数后，按「前一产品含有、后一产品不含」计算<b>有向换线成本</b>，以子集动态规划求
+    <b>总清洁时间最短</b>的完整生产顺序（并列时按产品 ID 序列取最小）。处于「需复核」状态的
+    记录<b>禁止参与</b>（原因见列表），请先在「⑪ 历史审查记录」完成字典时效复核。
+    本预览<b>不会</b>改写任何审查记录。</p>
+  <div id="changeover-products"><p class="hint">加载中…</p></div>
+  <div id="changeover-minutes-wrap" class="hidden">
+    <label>各过敏原清洁分钟数（按所选产品的过敏原并集生成，预填 30 分钟，可逐个修改）</label>
+    <div id="changeover-minutes" class="minutes-grid"></div>
+  </div>
+  <div class="toolbar">
+    <button onclick="submitChangeover()">计算最优换线顺序</button>
+    <span id="changeover-msg" class="error"></span>
+  </div>
+  <div id="changeover-result"></div>
+</section>
+
+<section>
+  <h2>⑦ 共用标签模板分组 <span class="pill gray">临时预览</span></h2>
+  <p class="hint">从历史审查记录中勾选 <b>2～12 个</b>时效正常的产品：系统复用各记录<b>当前配方</b>
+    （两版记录取标签核对对象，即新版配方）的<b>最终过敏原集合</b>；一组产品共用一张标签模板，
+    模板内容 = 组内产品过敏原<b>并集</b>，每个产品的<b>附加声明</b>为「模板含有而自身没有」的过敏原，
+    仅当组内每个产品的附加声明数都不超过其上限时该组才成立。后端用<b>子集动态规划</b>求
+    <b>模板数量最少</b>的完整分组，并列时按组内及组间产品 ID 序列取唯一最小者。缺失或
+    「需复核」记录<b>禁止参与</b>（原因见列表），请先在「⑪ 历史审查记录」完成字典时效复核。
+    本预览<b>不会</b>改写任何审查记录。</p>
+  <div id="tpl-products"><p class="hint">加载中…</p></div>
+  <div id="tpl-limits-wrap" class="hidden">
+    <label>每个产品最多允许的附加声明数量（按所选产品生成，预填 1 个，可逐个修改；未填写按 0 个计）</label>
+    <div id="tpl-limits" class="minutes-grid"></div>
+  </div>
+  <div class="toolbar">
+    <button onclick="submitTemplateGroup()">计算最少模板分组</button>
+    <span id="tpl-msg" class="error"></span>
+  </div>
+  <div id="tpl-result"></div>
+</section>
+
+<section>
+  <h2>⑧ 目标过敏原最小改配方案 <span class="pill gray">临时预览</span></h2>
+  <p class="hint">从历史审查记录中选择<b>一条时效正常</b>的记录及一个目标过敏原：系统复用该记录
+    <b>当前配方树</b>（两版记录取标签核对对象，即新版配方），列出该过敏原的<b>全部来源路径</b>。
+    请按<b>完整节点路径</b>为可替换的配料填写替换成本，<b>未填写的节点视为不可替换</b>。后端在
+    候选树上用<b>树形动态规划</b>求覆盖全部来源路径的<b>最低总成本</b>节点集合：选择祖先即同时
+    阻断其子树，方案不再选其后代；同成本按节点路径序列字典序取最小。处于「需复核」状态的记录
+    <b>禁止选择</b>（原因见列表），请先在「⑪ 历史审查记录」完成字典时效复核。
+    本预览<b>不会</b>改写任何审查记录。</p>
+  <div id="ref-records"><p class="hint">加载中…</p></div>
+  <div id="ref-setup-wrap" class="hidden">
+    <label>目标过敏原（取自所选记录当前配方的最终过敏原集合）</label>
+    <div id="ref-allergens" class="check-grid"></div>
+    <div class="toolbar">
+      <button onclick="loadReformulationSources()">载入来源路径</button>
+      <span id="ref-setup-msg" class="error"></span>
+    </div>
+  </div>
+  <div id="ref-sources-wrap" class="hidden">
+    <p id="ref-source-list"></p>
+    <div class="result-block">
+      <h3>可替换成本（按完整节点路径填写）</h3>
+      <p class="hint">仅列出目标过敏原来源路径上的节点；<b>留空 = 该节点不可替换</b>。
+        选择祖先节点即同时阻断其子树中的全部来源，方案不会再选其后代。</p>
+      <div id="ref-costs"></div>
+    </div>
+    <div class="toolbar">
+      <button onclick="submitReformulation()">计算最小改配方案</button>
+      <span id="ref-msg" class="error"></span>
+    </div>
+  </div>
+  <div id="ref-result"></div>
+</section>
+
+<section>
+  <h2>⑨ 过敏原检测套餐规划 <span class="pill gray">临时预览</span></h2>
+  <p class="hint">从历史审查记录中<b>仅选择一条时效正常</b>的记录：系统读取该记录<b>当前配方</b>
+    （两版记录取标签核对对象，即新版配方）的<b>最终过敏原</b>，作为套餐组合<b>必须覆盖项</b>。
+    逐行录入候选套餐 <code>套餐名：价格：过敏原列表</code>（冒号中英文均可，过敏原逗号 / 顿号分隔，
+    可留空），后端用<b>精确小数</b>比价、以<b>子集动态规划</b>求<b>总价最低</b>的套餐组合；
+    同价按<b>套餐名序列字典序</b>展示唯一方案并统计并列组合数（覆盖至少一个必须项的 0 元套餐，
+    即使加入后不新增覆盖也作为不同并列计入；正价冗余不进入最低价），无法全覆盖时列出<b>覆盖缺口</b>。
+    处于「需复核」状态的记录<b>禁止选择</b>（原因见列表），请先在「⑪ 历史审查记录」完成字典时效复核。
+    本预览<b>不会</b>写库，也不改写任何审查记录。</p>
+  <div id="panel-records"><p class="hint">加载中…</p></div>
+  <div id="panel-setup-wrap" class="hidden">
+    <p id="panel-required"></p>
+    <label>候选套餐（每行「套餐名：价格：过敏原列表」，# 注释 / 空行忽略；套餐名不可重复）</label>
+    <textarea id="panel-packages" rows="6"
+      placeholder="基础套餐：9.90：麸质谷物，蛋类&#10;乳品专项：10.00：乳&#10;大豆加购：5.00：大豆&#10;尊享全包：30.00：麸质谷物，乳，大豆，蛋类，坚果"></textarea>
+    <div class="toolbar">
+      <button onclick="submitPanelPlan()">计算最低总价套餐组合</button>
+      <button class="ghost" onclick="fillPanelDemo()">填充套餐示例</button>
+      <span id="panel-msg" class="error"></span>
+    </div>
+  </div>
+  <div id="panel-result"></div>
+</section>
+
+<section id="result-section" class="hidden">
+  <h2>⑩ 审查结果 <span id="result-title" class="hint"></span></h2>
+  <div id="recheck-bar"></div>
+  <div id="recheck-panel" class="recheck-panel hidden"></div>
+  <div id="result-body"></div>
+  <div class="toolbar">
+    <a id="export-html" class="link" href="#">⬇ 导出 HTML 报告</a>
+    <a id="export-md" class="link" href="#">⬇ 导出 Markdown 报告</a>
+  </div>
+</section>
+
+<section>
+  <h2>⑪ 历史审查记录</h2>
+  <div id="history-table"><p class="hint">暂无记录</p></div>
+</section>
+
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let presets = [];
+let dictEntries = [];
+let aliasEntries = [];
+let customAllergens = [];
+let currentReviewId = null;
+
+const DEMO_DICT = `小麦粉：麸质谷物
+乳清粉：乳
+乳糖：乳
+奶粉：乳
+可可脂：
+大豆卵磷脂：大豆
+鸡蛋：蛋类
+椰子粉：坚果
+芝麻：芝麻
+食盐：`;
+const DEMO_A = "配料表：小麦粉，白砂糖，巧克力酱（可可脂，奶粉（乳清粉，乳糖），大豆卵磷脂），鸡蛋，食盐";
+const DEMO_B = "配料表：小麦粉，白砂糖，巧克力酱（可可脂，椰子粉），鸡蛋，芝麻酱（芝麻），食盐";
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    let msg = res.statusText;
+    let detail = null;
+    try {
+      const body = await res.json();
+      detail = body.detail;
+      msg = (detail && detail.message) || (typeof detail === 'string' ? detail : msg);
+    } catch (e) {}
+    const err = new Error(msg);
+    err.detail = detail;
+    throw err;
+  }
+  return res.json();
+}
+const post = (path, body) => api(path, {
+  method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+
+/* ---------- 字典 ---------- */
+async function loadDict() {
+  const [d, p] = await Promise.all([api('/api/dict'), api('/api/preset-allergens')]);
+  dictEntries = d.entries;
+  presets = p.allergens;
+  renderDict();
+  renderDeclaredBox();
+}
+
+async function deleteEntry(name) {
+  await api('/api/dict/' + encodeURIComponent(name), {method: 'DELETE'});
+  await loadDict();
+  await loadHistory();
+}
+
+function renderDict() {
+  if (!dictEntries.length) {
+    $('dict-table-wrap').innerHTML = '<p class="hint">字典为空，请先导入。</p>';
+    return;
+  }
+  const rows = dictEntries.map(e =>
+    `<tr><td>${esc(e.ingredient)}</td>
+     <td>${e.allergens.map(a => `<span class="badge">${esc(a)}</span>`).join('') || '<span class="hint">无</span>'}</td>
+     <td><a class="link" onclick="deleteEntry('${esc(e.ingredient)}')">删除</a></td></tr>`).join('');
+  $('dict-table-wrap').innerHTML =
+    `<table><tr><th style="width:30%">原料</th><th>过敏原</th><th style="width:60px">操作</th></tr>${rows}</table>`;
+}
+
+async function importBulk() {
+  const text = $('bulk-text').value;
+  const r = await post('/api/dict/bulk', {text});
+  $('dict-msg').textContent = `已导入 ${r.imported} 条`;
+  await loadDict();
+  await loadHistory();
+}
+
+async function deleteEntry(name) {
+  await api('/api/dict/' + encodeURIComponent(name), {method: 'DELETE'});
+  await loadDict();
+  await loadHistory();
+}
+
+/* ---------- 原料别名 ---------- */
+async function loadAliases() {
+  const d = await api('/api/aliases');
+  aliasEntries = d.aliases;
+  renderAliases();
+}
+
+function renderAliases() {
+  if (!aliasEntries.length) {
+    $('alias-table-wrap').innerHTML = '<p class="hint">暂无别名，配方中的原料名将直接查字典。</p>';
+    return;
+  }
+  const rows = aliasEntries.map(a =>
+    `<tr><td>${esc(a.alias)}</td><td class="hint">→</td><td>${esc(a.target)}</td>
+     <td><a class="link" onclick="deleteAlias('${esc(a.alias)}')">删除</a></td></tr>`).join('');
+  $('alias-table-wrap').innerHTML =
+    `<table><tr><th style="width:34%">别名</th><th style="width:32px"></th><th>标准名</th>
+     <th style="width:60px">操作</th></tr>${rows}</table>`;
+}
+
+const ALIAS_ERR_LABEL = {
+  format: '格式错误', multi_target: '同一别名多目标',
+  self_loop: '自环', cycle: '环路',
+};
+
+async function importAliases() {
+  $('alias-error').textContent = '';
+  $('alias-msg').textContent = '';
+  try {
+    const r = await post('/api/aliases/bulk', {text: $('alias-text').value});
+    $('alias-msg').textContent = `已保存 ${r.imported} 条别名`;
+    await loadAliases();
+    await loadHistory();
+  } catch (e) {
+    const errs = (e.detail && e.detail.errors) || [];
+    $('alias-error').textContent = errs.length
+      ? errs.map(x => `· [${ALIAS_ERR_LABEL[x.type] || x.type}] ${x.message}`).join('\n')
+      : e.message;
+  }
+}
+
+async function deleteAlias(name) {
+  await api('/api/aliases/' + encodeURIComponent(name), {method: 'DELETE'});
+  await loadAliases();
+  await loadHistory();
+}
+
+async function submitAliasPreview() {
+  const wrap = $('alias-preview-wrap');
+  wrap.innerHTML = '<p class="hint">解析中…</p>';
+  try {
+    const r = await post('/api/aliases/resolve-preview', {text: $('text-a').value});
+    renderAliasPreview(r.items);
+  } catch (e) {
+    wrap.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+  }
+}
+
+function renderAliasPreview(items) {
+  if (!items.length) {
+    $('alias-preview-wrap').innerHTML = '<p class="hint">未从配方文本解析到原料。</p>';
+    return;
+  }
+  const rows = items.map(it => {
+    const chain = it.chain.map((n, i) =>
+      (i === it.chain.length - 1
+        ? `<b>${esc(n)}</b>` : esc(n)) +
+      (i < it.chain.length - 1 ? ' <span class="src-arrow">→</span> ' : '')
+    ).join('');
+    const tag = it.resolved ? '<span class="pill blue">别名解析</span>' : '';
+    const dictTag = it.in_dict
+      ? (it.allergens.length
+        ? it.allergens.map(a => `<span class="badge ok">${esc(a)}</span>`).join('')
+        : '<span class="hint">已登记（无过敏原）</span>')
+      : (it.is_leaf
+        ? '<span class="pill orange">最终标准名未登记</span>'
+        : '<span class="hint">复合配料，过敏原来自子配料</span>');
+    return `<tr><td>${esc(it.name)} ${tag}</td><td>${chain}</td><td>${dictTag}</td></tr>`;
+  }).join('');
+  $('alias-preview-wrap').innerHTML =
+    `<div class="result-block"><h3>别名解析预览（按配方文本 A）</h3>
+     <p class="hint">审查时按最终标准名查字典并计算指纹；配方树与遗漏来源路径仍显示左侧原始名称。</p>
+     <table><tr><th style="width:26%">配方原始名</th><th style="width:38%">解析链 → 最终标准名</th>
+     <th>最终标准名字典</th></tr>${rows}</table></div>`;
+}
+
+/* ---------- 声明过敏原勾选 ---------- */
+function renderDeclaredBox() {
+  const inDict = new Set();
+  dictEntries.forEach(e => e.allergens.forEach(a => inDict.add(a)));
+  const all = [...presets, ...[...inDict].filter(a => !presets.includes(a)),
+               ...customAllergens.filter(a => !presets.includes(a) && !inDict.has(a))];
+  const checked = new Set([...document.querySelectorAll('#declared-box input:checked')]
+    .map(i => i.value));
+  $('declared-box').innerHTML = all.map(a =>
+    `<label><input type="checkbox" value="${esc(a)}" ${checked.has(a) ? 'checked' : ''}> ${esc(a)}</label>`
+  ).join('');
+}
+
+function addCustomAllergen() {
+  const v = $('custom-allergen').value.trim();
+  if (!v) return;
+  if (!customAllergens.includes(v)) customAllergens.push(v);
+  $('custom-allergen').value = '';
+  renderDeclaredBox();
+  document.querySelectorAll('#declared-box input').forEach(i => {
+    if (i.value === v) i.checked = true;
+  });
+}
+
+/* ---------- 审查 ---------- */
+async function submitReview() {
+  $('review-msg').textContent = '';
+  const declared = [...document.querySelectorAll('#declared-box input:checked')].map(i => i.value);
+  try {
+    const r = await post('/api/reviews', {
+      name: $('review-name').value || '未命名审查',
+      text_a: $('text-a').value,
+      text_b: $('text-b').value || null,
+      declared,
+    });
+    currentReviewId = r.id;
+    renderResult(r, {name: $('review-name').value, declared});
+    renderRecheckBar(null);
+    await loadHistory();
+  } catch (e) {
+    $('review-msg').textContent = e.message;
+  }
+}
+
+function badges(arr, cls = '') {
+  return arr.length
+    ? arr.map(a => `<span class="badge ${cls}">${esc(a)}</span>`).join('')
+    : '<span class="hint">无</span>';
+}
+
+function treeHtml(nodes) {
+  if (!nodes || !nodes.length) return '';
+  return '<ul class="tree">' + nodes.map(n => {
+    const own = n.own_allergens.map(a => `<span class="badge own" title="自身标注">${esc(a)}</span>`).join('');
+    const inherited = n.total_allergens.filter(a => !n.own_allergens.includes(a))
+      .map(a => `<span class="badge" title="子配料传播">${esc(a)}</span>`).join('');
+    const unknown = n.unknown ? '<span class="tag-unknown">⚠ 未识别</span>' : '';
+    return `<li><b>${esc(n.name)}</b>${unknown} ${own}${inherited}${treeHtml(n.children)}</li>`;
+  }).join('') + '</ul>';
+}
+
+function versionHtml(title, v) {
+  const unknown = v.unknown_ingredients.length
+    ? `<p class="warn">⚠ 未识别原料（字典未登记，请补充）：${v.unknown_ingredients.map(esc).join('、')}</p>` : '';
+  return `<div class="result-block"><h3>${esc(title)}</h3>
+    <p>过敏原全集：${badges(v.allergens)}</p>${unknown}${treeHtml(v.tree)}</div>`;
+}
+
+function missingCell(check) {
+  if (!check.missing.length) return '<span class="hint">无</span>';
+  const sources = check.missing_sources || {};
+  return check.missing.map(a => {
+    const paths = sources[a] || [];
+    const detail = paths.length
+      ? `<details class="src-detail" open>
+           <summary>来源路径（${paths.length}）</summary>
+           <ul class="src-paths">${paths.map(p =>
+             '<li>' + p.map((part, i) =>
+               `<span${i === p.length - 1 ? ' class="src-leaf"' : ''}>${esc(part)}</span>`
+             ).join('<span class="src-arrow"> › </span>') + '</li>').join('')}</ul>
+         </details>`
+      : '';
+    return `<div class="miss-item"><span class="badge miss">${esc(a)}</span>${detail}</div>`;
+  }).join('');
+}
+
+function renderResult(r, meta) {
+  $('result-section').classList.remove('hidden');
+  $('result-title').textContent = meta && meta.name ? `— ${meta.name}` : '';
+  $('result-body').innerHTML = resultBodyHtml(r, meta);
+  $('export-html').href = `/api/reviews/${currentReviewId}/report?format=html`;
+  $('export-md').href = `/api/reviews/${currentReviewId}/report?format=md`;
+  $('result-section').scrollIntoView({behavior: 'smooth'});
+}
+
+function resultBodyHtml(r, meta) {
+  const check = r.label_check;
+  let html = `<div class="result-block">
+    <h3>标签核对结论（核对对象：${esc(r.label_check_version)}）
+      ${check.missing.length ? `<span class="pill red">遗漏 ${check.missing.length} 项</span>` : '<span class="pill green">无遗漏</span>'}
+    </h3>
+    <table>
+      <tr><th style="width:14em">标签遗漏（必须补充）</th><td>${missingCell(check)}</td></tr>
+      <tr><th>标签多报</th><td>${badges(check.over_reported, 'over')}</td></tr>
+      <tr><th>声明一致</th><td>${badges(check.matched, 'ok')}</td></tr>
+    </table></div>`;
+  html += versionHtml('配方 A 解析树', r.version_a);
+  if (r.version_b) html += versionHtml('配方 B 解析树', r.version_b);
+  if (r.diff) {
+    let rows = '';
+    (r.ingredient_changes || []).forEach(c => {
+      let txt;
+      if (c.change === 'added') txt = `新增配料，引入：${c.allergens.join('、') || '无'}`;
+      else if (c.change === 'removed') txt = `移除配料，原含：${c.allergens.join('、') || '无'}`;
+      else txt = `新增 ${c.added.join('、') || '—'}；减少 ${c.removed.join('、') || '—'}`;
+      rows += `<tr><td>${esc(c.ingredient)}</td><td>${esc(txt)}</td></tr>`;
+    });
+    html += `<div class="result-block"><h3>版本对比（A → B）</h3>
+      <p>新增过敏原：${badges(r.diff.added, 'add')}<br>
+         减少过敏原：${badges(r.diff.removed, 'del')}<br>
+         保持不变：${badges(r.diff.unchanged)}</p>
+      ${rows ? `<table><tr><th style="width:30%">配料</th><th>变化</th></tr>${rows}</table>` : '<p class="hint">各配料过敏原无变化。</p>'}
+    </div>`;
+  }
+  return html;
+}
+
+/* ---------- 历史 ---------- */
+async function loadHistory() {
+  const {reviews} = await api('/api/reviews');
+  if (!reviews.length) {
+    $('history-table').innerHTML = '<p class="hint">暂无记录</p>';
+    await loadChangeoverProducts();  // 换线排程候选列表随记录变化一并刷新
+    await loadTemplateProducts();    // 模板分组候选列表同步刷新
+    await loadReformulationRecords();  // 最小改配候选记录同步刷新
+    await loadPanelRecords();       // 套餐规划候选记录同步刷新
+    return;
+  }
+  const rows = reviews.map(r => {
+    let fresh;
+    if (r.needs_recheck) {
+      const why = r.recheck_reason === 'legacy' ? '旧记录无指纹' : '相关原料映射已变更';
+      fresh = `<span class="pill orange" title="${esc(why)}">需复核</span>
+        <button class="ghost" style="padding:2px 10px;font-size:12px;margin-left:6px"
+          onclick="recheckReview(${r.id})">一键复核</button>`;
+    } else {
+      fresh = '<span class="pill green" title="所用字典与当前字典一致">时效正常</span>';
+    }
+    return `<tr>
+    <td>#${r.id}</td>
+    <td><a class="link" onclick="viewReview(${r.id})">${esc(r.name)}</a></td>
+    <td>${r.has_two_versions ? '两版对比' : '单版'}</td>
+    <td>${r.missing_count ? `<span class="pill red">遗漏 ${r.missing_count}</span>` : '<span class="pill green">无遗漏</span>'}
+        ${r.over_reported_count ? `<span class="pill gray">多报 ${r.over_reported_count}</span>` : ''}</td>
+    <td>${fresh}</td>
+    <td class="hint">${esc(r.created_at)}</td>
+    <td><a class="link" href="/api/reviews/${r.id}/report?format=html">报告</a>
+        <a class="link" onclick="deleteReview(${r.id})" style="margin-left:8px">删除</a></td>
+  </tr>`;}).join('');
+  $('history-table').innerHTML =
+    `<table><tr><th>ID</th><th>名称</th><th>类型</th><th>结论</th><th>字典时效</th><th>时间</th><th>操作</th></tr>${rows}</table>`;
+  await loadChangeoverProducts();  // 换线排程候选列表随记录 / 字典时效变化一并刷新
+  await loadTemplateProducts();    // 模板分组候选列表同步刷新
+  await loadReformulationRecords();  // 最小改配候选记录同步刷新
+  await loadPanelRecords();        // 套餐规划候选记录同步刷新
+}
+
+async function viewReview(id) {
+  const r = await api('/api/reviews/' + id);
+  currentReviewId = id;
+  renderResult({...r.result, label_check_version: r.result.label_check_version},
+               {name: r.name, declared: r.declared});
+  renderRecheckBar(r);
+}
+
+/* ---------- 字典时效复核 ---------- */
+let currentReviewMeta = null;
+
+function renderRecheckBar(r) {
+  currentReviewMeta = r;
+  const bar = $('recheck-bar');
+  $('recheck-panel').classList.add('hidden');
+  $('recheck-panel').innerHTML = '';
+  if (!r) { bar.innerHTML = ''; return; }
+  if (r.needs_recheck) {
+    const why = r.recheck_reason === 'legacy'
+      ? '该记录创建时未保存字典指纹（旧版本记录），请按需用当前字典复核。'
+      : '该记录涉及原料的过敏原映射自审查后发生变化，历史结论可能已过时。';
+    bar.innerHTML =
+      `<div class="recheck-bar">⚠ <b>需复核：</b>${esc(why)}
+         <button onclick="openRecheck()">一键复核</button></div>`;
+  } else {
+    bar.innerHTML =
+      `<div class="recheck-bar" style="border-color:#86efac;background:#f0fdf4">
+         ✅ <b style="color:var(--green)">字典时效正常：</b>
+         所用过敏原字典与当前字典中本配方涉及原料的映射一致，结论有效。
+       </div>`;
+  }
+}
+
+function deltaLine(label, delta) {
+  const parts = [];
+  if (delta.added.length)
+    parts.push(`<span class="delta-add">+ ${delta.added.map(esc).join('、')}</span>`);
+  if (delta.removed.length)
+    parts.push(`<span class="delta-del">− ${delta.removed.map(esc).join('、')}</span>`);
+  if (!parts.length) return '';
+  return `<div class="delta-list"><b>${esc(label)}：</b>${parts.join('　')}</div>`;
+}
+
+function pathLine(path) {
+  return path.map((part, i) =>
+    `<span${i === path.length - 1 ? ' class="src-leaf"' : ''}>${esc(part)}</span>`
+  ).join('<span class="src-arrow"> › </span>');
+}
+
+function pathChangesHtml(changes) {
+  if (!changes.length) return '';
+  return changes.map(c => {
+    const added = c.paths_added.map(p =>
+      `<div class="delta-path"><span class="delta-add">新增路径</span> ${pathLine(p)}</div>`).join('');
+    const removed = c.paths_removed.map(p =>
+      `<div class="delta-path"><span class="delta-del">消失路径</span> ${pathLine(p)}</div>`).join('');
+    return `<div class="delta-list"><span class="badge miss">${esc(c.allergen)}</span> 来源路径变化：</div>${added}${removed}`;
+  }).join('');
+}
+
+function versionsDiffHtml(versions) {
+  const titles = {version_a: '配方 A', version_b: '配方 B'};
+  let out = '';
+  for (const [key, d] of Object.entries(versions)) {
+    const block = deltaLine(`${titles[key] || key} 过敏原全集`, d.allergens)
+      + deltaLine(`${titles[key] || key} 未识别原料`, d.unknown_ingredients);
+    if (block) out += `<h4>${esc(titles[key] || key)} 变化</h4>${block}`;
+  }
+  return out;
+}
+
+async function recheckReview(id) {
+  await viewReview(id);
+  $('result-section').scrollIntoView({behavior: 'smooth'});
+  await openRecheck();
+}
+
+async function openRecheck() {
+  if (!currentReviewId) return;
+  const panel = $('recheck-panel');
+  panel.classList.remove('hidden');
+  panel.innerHTML = '<p class="hint">正在用当前字典重新解析原始配方…</p>';
+  try {
+    const r = await post(`/api/reviews/${currentReviewId}/recheck`, {confirm: false});
+    renderRecheckPreview(r);
+  } catch (e) {
+    panel.innerHTML = `<p class="error">复核失败：${esc(e.message)}</p>`;
+  }
+}
+
+function renderRecheckPreview(r) {
+  const d = r.diff, label = d.label, versions = d.versions;
+  let body = '';
+  if (!r.changed) {
+    body = `<p>✅ 当前字典重新解析后，<b>遗漏 / 多报、来源路径及各版过敏原均无变化</b>，
+              历史结论仍然成立。确认仅会刷新字典指纹（旧记录也由此补上指纹）。</p>`;
+  } else {
+    body += '<h4>标签核对差异（核对对象：'
+      + esc(label.label_check_version.before) + '）</h4>';
+    body += deltaLine('遗漏（新增 / 消失）', label.missing_delta);
+    body += deltaLine('多报（新增 / 消失）', label.over_reported_delta);
+    body += deltaLine('声明一致（新增 / 移出）', label.matched_delta);
+    body += pathChangesHtml(label.path_changes);
+    body += versionsDiffHtml(versions);
+    body += '<div class="recheck-preview"><p class="hint">下方结果区可切换查看「按当前字典复核后」的完整结论。</p>'
+      + '<div class="toolbar">'
+      + '<button class="ghost" onclick="showRecheckPreview()">查看复核后结果</button>'
+      + '<button class="ghost" onclick="showSavedResult()">查看当前保存结果</button>'
+      + '</div><div id="recheck-preview-body"></div></div>';
+  }
+  $('recheck-panel').innerHTML =
+    `<h3>字典时效复核（记录 #${esc(String(r.id))}）</h3>${body}
+     <div class="toolbar">
+       <button onclick="confirmRecheck()">确认并覆盖结果</button>
+       <button class="secondary" onclick="cancelRecheck()">取消</button>
+     </div>`;
+  if (r.changed) window.__recheckNewResult = r.new_result;
+}
+
+function showRecheckPreview() {
+  const newResult = window.__recheckNewResult;
+  const meta = currentReviewMeta || {};
+  $('recheck-preview-body').innerHTML =
+    '<div class="recheck-preview">'
+    + resultBodyHtml({...newResult, label_check_version: newResult.label_check_version},
+                     {name: (meta.name || '') + '（复核后预览）', declared: meta.declared || []})
+    + '</div>';
+  $('recheck-preview-body').classList.remove('hidden');
+}
+
+function showSavedResult() {
+  $('recheck-preview-body').innerHTML = '';
+}
+
+async function confirmRecheck() {
+  try {
+    const r = await post(`/api/reviews/${currentReviewId}/recheck`, {confirm: true});
+    const review = r.review;
+    $('recheck-panel').classList.add('hidden');
+    $('recheck-panel').innerHTML = '';
+    renderResult({...review.result, label_check_version: review.result.label_check_version},
+                 {name: review.name, declared: review.declared});
+    renderRecheckBar(review);
+    await loadHistory();
+  } catch (e) {
+    alert('复核确认失败：' + e.message);
+  }
+}
+
+function cancelRecheck() {
+  const panel = $('recheck-panel');
+  panel.classList.add('hidden');
+  panel.innerHTML = '';
+}
+
+async function deleteReview(id) {
+  if (!confirm('确定删除该审查记录？')) return;
+  await api('/api/reviews/' + id, {method: 'DELETE'});
+  await loadHistory();
+}
+
+/* ---------- 供应商方案风险区间（临时预览） ---------- */
+function splitAllergens(text) {
+  return [...new Set(text.split(/[,，、;；\s]+/).map(s => s.trim()).filter(Boolean))];
+}
+
+async function submitRiskPreview() {
+  $('risk-msg').textContent = '';
+  try {
+    const r = await post('/api/supplier-risk-preview', {
+      text: $('risk-text').value,
+      plans_text: $('risk-plans').value,
+      declared: splitAllergens($('risk-declared').value),
+    });
+    renderRiskResult(r);
+  } catch (e) {
+    $('risk-result').innerHTML = '';
+    $('risk-msg').textContent = e.message;
+  }
+}
+
+function riskCell(items, cls, sources, potential) {
+  if (!items.length) return '<span class="hint">无</span>';
+  return items.map(a => {
+    const paths = (sources || {})[a] || [];
+    const detail = paths.length
+      ? `<details class="src-detail" open>
+           <summary>来源路径（${paths.length}）</summary>
+           <ul class="src-paths">${paths.map(p =>
+             '<li>' + p.map((part, i) =>
+               `<span${i === p.length - 1 ? ` class="src-leaf${potential ? ' potential' : ''}"` : ''}>${esc(part)}</span>`
+             ).join('<span class="src-arrow"> › </span>') + '</li>').join('')}</ul>
+         </details>` : '';
+    return `<div class="miss-item"><span class="badge ${cls}">${esc(a)}</span>${detail}</div>`;
+  }).join('');
+}
+
+function riskTreeHtml(nodes) {
+  if (!nodes || !nodes.length) return '';
+  return '<ul class="tree">' + nodes.map(n => {
+    const nec = n.own_necessary.map(a => `<span class="badge nec" title="自身必然含有（各方案交集）">${esc(a)}</span>`).join('');
+    const ownPosOnly = n.own_possible.filter(a => !n.own_necessary.includes(a));
+    const pos = ownPosOnly.map(a => `<span class="badge pos" title="自身仅部分方案可能含有（方案并集 − 交集）">${esc(a)}</span>`).join('');
+    const childNec = n.total_necessary.filter(a => !n.own_necessary.includes(a))
+      .map(a => `<span class="badge" title="子配料必然传播">${esc(a)}</span>`).join('');
+    const childPosOnly = n.total_possible.filter(a =>
+      !n.total_necessary.includes(a) && !ownPosOnly.includes(a))
+      .map(a => `<span class="badge pos" title="子配料仅可能传播">${esc(a)}</span>`).join('');
+    const tag = n.overridden
+      ? `<span class="tag-plan" title="该原料被供应商方案覆盖，不使用字典">◈ 方案×${n.plan_count}</span>` : '';
+    const unknown = n.unknown ? '<span class="tag-unknown">⚠ 未识别</span>' : '';
+    return `<li><b>${esc(n.name)}</b>${tag}${unknown} ${nec}${pos}${childNec}${childPosOnly}${riskTreeHtml(n.children)}</li>`;
+  }).join('') + '</ul>';
+}
+
+function renderRiskResult(r) {
+  const c = r.label_check;
+  const modePill = r.single_plan
+    ? '<span class="pill green" title="所有覆盖原料均只有单一方案，与现有审查口径一致">单方案 · 与正式审查一致</span>'
+    : '<span class="pill blue" title="存在互斥方案，过敏原为区间估计">多方案 · 区间预览</span>';
+  let html = `<div class="result-block">
+    <h3>标签核对（风险区间）${modePill}</h3>
+    <p class="legend">图例：
+      <span class="badge cmiss">确定遗漏</span> 必然含有且未声明；
+      <span class="badge pmiss">潜在遗漏</span> 仅部分方案可能含有且未声明；
+      <span class="badge cover">确定多报</span> 任何方案都不可能含有；
+      <span class="badge pover">潜在多报</span> 仅部分方案可能引入；
+      <span class="badge ok">一致</span> 必然含有且已声明</p>
+    <table>
+      <tr><th style="width:14em">确定遗漏（必须补充）</th><td>${riskCell(c.certain_missing, 'cmiss', c.certain_missing_sources, false)}</td></tr>
+      <tr><th>潜在遗漏（视供应商而定）</th><td>${riskCell(c.potential_missing, 'pmiss', c.potential_missing_sources, true)}</td></tr>
+      <tr><th>确定多报</th><td>${badges(c.certain_over_reported, 'cover')}</td></tr>
+      <tr><th>潜在多报</th><td>${badges(c.potential_over_reported, 'pover')}</td></tr>
+      <tr><th>声明一致</th><td>${badges(c.matched, 'ok')}</td></tr>
+    </table></div>`;
+
+  html += `<div class="result-block">
+    <h3>整份配方风险区间</h3>
+    <p>必然过敏原（所有供应商选择下都含有）：${badges(r.allergens_necessary, 'nec')}<br>
+       可能过敏原（至少一个方案可能引入）：${badges(r.allergens_possible, 'pos')}</p>
+    <p class="legend"><span class="badge nec">深绿</span> 该原料各方案下必然含有；
+      <span class="badge pos">黄色虚线</span> 仅部分方案可能含有；
+      浅色无描边徽章为子配料传播。<span class="tag-plan">◈ 方案×n</span>
+      标记被供应商方案覆盖（不使用字典）的原料。</p>`;
+  if (r.unknown_ingredients.length)
+    html += `<p class="warn">⚠ 未识别原料（字典未登记且无供应商方案）：${r.unknown_ingredients.map(esc).join('、')}</p>`;
+  html += riskTreeHtml(r.tree) + '</div>';
+
+  if (r.overrides.length) {
+    const rows = r.overrides.map(o => {
+      const plans = o.plans.map((p, i) =>
+        (p.length ? p.map(esc).join('、') : '<span class="hint">无（不含过敏原）</span>')
+        + (o.plans.length > 1 ? ` <span class="hint">[方案${i + 1}]</span>` : '')).join('　｜　');
+      return `<tr><td>${esc(o.ingredient)}${o.used ? '' : ' <span class="pill orange">配方未使用</span>'}</td><td>${plans}</td></tr>`;
+    }).join('');
+    html += `<div class="result-block"><h3>本次采用的供应商方案（覆盖字典，仅本预览有效）</h3>
+      <table><tr><th style="width:30%">原料</th><th>互斥方案</th></tr>${rows}</table></div>`;
+  }
+  if (r.unused_plan_ingredients.length)
+    html += `<p class="warn">以下方案原料未在配方中出现，已忽略：${r.unused_plan_ingredients.map(esc).join('、')}</p>`;
+  $('risk-result').innerHTML = html;
+}
+
+async function fillRiskDemo() {
+  $('bulk-text').value = DEMO_DICT;
+  await importBulk();
+  $('risk-text').value = "配料表：小麦粉，巧克力酱（可可脂，奶粉（乳清粉，乳糖），大豆卵磷脂），鸡蛋，食盐";
+  // 乳清粉两个互斥方案使乳仅可能；奶粉/乳糖单方案「无」覆盖字典；
+  // 可可脂两方案使坚果可能。大豆未覆盖、沿用字典 -> 仍然确定。
+  $('risk-plans').value = "乳清粉：乳；无\n奶粉：无\n乳糖：无\n可可脂：无；坚果";
+  $('risk-declared').value = "麸质谷物，蛋类，坚果，鱼";
+  $('risk-msg').textContent = '示例已填充：乳为潜在遗漏，大豆为确定遗漏（沿用字典），坚果为潜在多报，鱼为确定多报';
+}
+
+/* ---------- 配料占比区间顺序校验（临时预览） ---------- */
+const fmtPct = v => String(v);
+
+function annText(lo, hi) {
+  return lo === hi ? `${fmtPct(lo)}%` : `${fmtPct(lo)}-${fmtPct(hi)}%`;
+}
+
+function propGroupTitle(path) {
+  return path.length ? path.map(esc).join(' › ') + ' 的子配料' : '顶层配料';
+}
+
+async function submitProportionCheck() {
+  $('prop-msg').textContent = '';
+  try {
+    const r = await post('/api/proportion-check-preview', {text: $('prop-text').value});
+    renderProportionResult(r);
+  } catch (e) {
+    $('prop-result').innerHTML = '';
+    $('prop-msg').textContent = e.message;
+  }
+}
+
+function proportionErrorsHtml(errors) {
+  const rows = errors.map(e => `<tr>
+    <td>${e.path.length ? e.path.map(esc).join(' › ') : '（配方整体）'}</td>
+    <td><span class="error">${esc(e.message)}</span></td></tr>`).join('');
+  return `<div class="result-block"><h3>占比标注有误
+      <span class="pill red">${errors.length} 处</span></h3>
+    <table><tr><th style="width:42%">嵌套路径</th><th>问题</th></tr>${rows}</table>
+    <p class="hint">修正全部标注问题后重新校验。</p></div>`;
+}
+
+function proportionConflictsHtml(conflicts) {
+  const blocks = conflicts.map(c => {
+    const fragment = c.fragment.map(f =>
+      `<span class="badge miss">${esc(f.name)}[${annText(f.lo, f.hi)}]</span>`
+    ).join('<span class="src-arrow"> ≥ </span>');
+    return `<div class="recheck-bar" style="border-color:#fca5a5;background:#fef2f2">
+      <b>同级组：</b>${propGroupTitle(c.path)}<br>
+      <b>最短冲突片段：</b>${fragment}
+      <div class="error" style="margin-top:4px">${esc(c.message)}</div>
+    </div>`;
+  }).join('');
+  return `<div class="result-block"><h3>占比顺序不可行
+      <span class="pill red">${conflicts.length} 组冲突</span></h3>
+    <p class="hint">按标签顺序同级占比须非递增；下列每组的最短冲突片段即无法满足该约束的最小连续片段。</p>
+    ${blocks}</div>`;
+}
+
+function proportionGroupsHtml(groups) {
+  return groups.map(g => {
+    const rows = g.items.map((it, i) => {
+      const tightened = it.original[0] !== it.tightened[0] ||
+                        it.original[1] !== it.tightened[1];
+      const range = it.pinned
+        ? `<b>${fmtPct(it.tightened[0])}%</b>`
+        : `${fmtPct(it.tightened[0])}% ~ ${fmtPct(it.tightened[1])}%`;
+      return `<tr><td>${i + 1}</td>
+        <td>${esc(it.name)}${it.pinned
+          ? ' <span class="pill orange" title="该原料占比被约束锁定，只能取此单一边界值">锁定单值</span>'
+          : ''}</td>
+        <td>${annText(it.original[0], it.original[1])}</td>
+        <td>${range}${tightened ? ' <span class="hint">（已收紧）</span>' : ''}</td></tr>`;
+    }).join('');
+    return `<h4 style="margin:12px 0 4px">${propGroupTitle(g.path)}</h4>
+      <table><tr><th style="width:3em">顺序</th><th>原料</th>
+      <th>标注区间</th><th>收紧后可行区间</th></tr>${rows}</table>`;
+  }).join('');
+}
+
+function renderProportionResult(r) {
+  let html;
+  if (r.status === 'error') {
+    html = proportionErrorsHtml(r.errors);
+  } else if (r.status === 'infeasible') {
+    html = proportionConflictsHtml(r.conflicts);
+  } else {
+    html = `<div class="result-block"><h3>占比顺序可行
+        <span class="pill green">${r.group_count} 组全部通过</span></h3>
+      <p class="legend">区间传播（前向收紧上界、后向收紧下界）后的精确可行区间；
+        <span class="pill orange">锁定单值</span> 表示只能取该单一边界值。</p>
+      ${proportionGroupsHtml(r.groups)}</div>`;
+  }
+  $('prop-result').innerHTML = html;
+}
+
+function fillProportionDemo() {
+  // 巧克力酱上界被小麦粉收紧（60→55），鸡蛋与食盐互相锁定为 20%，
+  // 可可脂下界被奶粉收紧（10→12）
+  $('prop-text').value = '配料表：小麦粉[40-55%]，巧克力酱[25-60%]（可可脂[10-18%]，奶粉[12-15%]），鸡蛋[5-20%]，食盐[20-30%]';
+  $('prop-msg').textContent = '示例已填充，点击「校验占比顺序」查看区间收紧与单值锁定';
+  $('prop-result').innerHTML = '';
+}
+
+/* ---------- 共线生产换线排程（临时预览） ---------- */
+let changeoverProducts = [];
+let changeoverSelected = new Set();
+let changeoverMinutes = {};   // 过敏原 -> 输入框当前值（跨渲染保留）
+const CHANGEOVER_DEFAULT_MINUTES = 30;
+
+async function loadChangeoverProducts() {
+  try {
+    const d = await api('/api/changeover/products');
+    changeoverProducts = d.products;
+    renderChangeoverProducts();
+  } catch (e) {
+    $('changeover-products').innerHTML =
+      `<p class="error">候选产品加载失败：${esc(e.message)}</p>`;
+  }
+}
+
+function renderChangeoverProducts() {
+  const wrap = $('changeover-products');
+  if (!changeoverProducts.length) {
+    wrap.innerHTML = '<p class="hint">暂无历史审查记录，请先在「③ 新建标签审查」创建。</p>';
+    renderChangeoverMinutes();
+    return;
+  }
+  // 仅保留仍然存在且可参与的勾选
+  const eligible = new Set(changeoverProducts.filter(p => p.eligible).map(p => p.id));
+  changeoverSelected = new Set([...changeoverSelected].filter(id => eligible.has(id)));
+  const rows = changeoverProducts.map(p => {
+    const allergens = p.allergens.length
+      ? p.allergens.map(a => `<span class="badge">${esc(a)}</span>`).join('')
+      : '<span class="hint">无过敏原</span>';
+    const cb = p.eligible
+      ? `<input type="checkbox" value="${p.id}" ${changeoverSelected.has(p.id) ? 'checked' : ''} onchange="onChangeoverSelect()">`
+      : `<input type="checkbox" disabled title="${esc(p.blocked_reason)}">`;
+    const state = p.eligible
+      ? '<span class="pill green" title="字典时效正常">可参与</span>'
+      : `<span class="pill orange" title="${esc(p.blocked_reason)}">禁止参与</span>`;
+    const note = p.eligible ? '' : `<div class="warn">⚠ ${esc(p.blocked_reason)}</div>`;
+    return `<tr><td>${cb}</td><td>#${p.id}</td><td>${esc(p.name)}${note}</td>
+      <td class="hint">${esc(p.source_version)}</td><td>${allergens}</td><td>${state}</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table><tr><th style="width:40px">选择</th><th style="width:3.5em">ID</th>
+    <th>产品（审查记录）</th><th style="width:6.5em">取值版本</th>
+    <th>当前配方最终过敏原集合</th><th style="width:5.5em">状态</th></tr>${rows}</table>
+    <p class="hint">已选 <b id="changeover-count">${changeoverSelected.size}</b> 个（需 2～10 个）；
+      「取值版本」为记录的标签核对对象（两版记录即新版配方）。</p>`;
+  renderChangeoverMinutes();
+}
+
+function onChangeoverSelect() {
+  changeoverSelected = new Set(
+    [...document.querySelectorAll('#changeover-products input[type=checkbox]:checked')]
+      .map(i => Number(i.value)));
+  const cnt = $('changeover-count');
+  if (cnt) cnt.textContent = changeoverSelected.size;
+  renderChangeoverMinutes();
+}
+
+function selectedChangeoverAllergens() {
+  const union = new Set();
+  changeoverProducts.forEach(p => {
+    if (changeoverSelected.has(p.id)) p.allergens.forEach(a => union.add(a));
+  });
+  return [...union].sort();
+}
+
+function captureChangeoverMinutes() {
+  document.querySelectorAll('#changeover-minutes input').forEach(i => {
+    changeoverMinutes[i.dataset.allergen] = i.value;
+  });
+}
+
+function renderChangeoverMinutes() {
+  captureChangeoverMinutes();
+  const wrap = $('changeover-minutes-wrap');
+  const allergens = selectedChangeoverAllergens();
+  if (!allergens.length) {
+    wrap.classList.add('hidden');
+    $('changeover-minutes').innerHTML = '';
+    return;
+  }
+  wrap.classList.remove('hidden');
+  $('changeover-minutes').innerHTML = allergens.map(a => {
+    const v = changeoverMinutes[a] !== undefined
+      ? changeoverMinutes[a] : CHANGEOVER_DEFAULT_MINUTES;
+    return `<label><span class="badge">${esc(a)}</span><input type="number" min="0" step="any"
+      value="${esc(String(v))}" data-allergen="${esc(a)}"></label>`;
+  }).join('');
+}
+
+async function submitChangeover() {
+  $('changeover-msg').textContent = '';
+  $('changeover-result').innerHTML = '';
+  captureChangeoverMinutes();
+  const ids = [...changeoverSelected];
+  if (ids.length < 2 || ids.length > 10) {
+    $('changeover-msg').textContent = `请勾选 2～10 个产品（当前 ${ids.length} 个）`;
+    return;
+  }
+  const minutes = {};
+  for (const a of selectedChangeoverAllergens()) {
+    const raw = changeoverMinutes[a];
+    const v = Number(raw);
+    if (raw === undefined || String(raw).trim() === '' || !isFinite(v) || v < 0) {
+      $('changeover-msg').textContent =
+        `过敏原「${a}」的清洁分钟数无效（需为不小于 0 的数字）`;
+      return;
+    }
+    minutes[a] = v;
+  }
+  try {
+    const r = await post('/api/changeover-schedule-preview',
+      {review_ids: ids, cleaning_minutes: minutes});
+    renderChangeoverResult(r);
+  } catch (e) {
+    const problems = (e.detail && e.detail.problems) || [];
+    $('changeover-msg').textContent = e.message;
+    if (problems.length) {
+      $('changeover-result').innerHTML = `<div class="result-block"><h3>禁止参与的记录</h3>
+        <table><tr><th style="width:4em">ID</th><th>产品</th><th>原因</th></tr>
+        ${problems.map(p => `<tr><td>#${esc(String(p.id))}</td>
+          <td>${esc(p.name || '（未知）')}</td>
+          <td class="error">${esc(p.message)}</td></tr>`).join('')}</table></div>`;
+    }
+    await loadChangeoverProducts();  // 刷新资格状态（记录可能刚被复核或删除）
+  }
+}
+
+function renderChangeoverResult(r) {
+  const nameOf = {};
+  r.products.forEach(p => { nameOf[p.id] = p.name; });
+  const orderText = r.order.map(id => `<b>#${id}</b> ${esc(nameOf[id] || '')}`)
+    .join(' <span class="src-arrow">→</span> ');
+  const tie = r.optimal_count > 1
+    ? `<p class="hint">共有 ${r.optimal_count} 个总耗时相同的并列最优顺序，已按产品 ID 序列展示最小者。</p>`
+    : '';
+  const rows = r.segments.map((s, i) => {
+    const allergens = s.details.length
+      ? s.details.map(d => `<span class="badge miss">${esc(d.allergen)}</span> <span class="hint">${d.minutes} 分钟</span>`).join('　')
+      : '<span class="hint">无需清洁（后一产品已含前一产品全部过敏原）</span>';
+    return `<tr><td>${i + 1}</td>
+      <td><b>#${s.from.id}</b> ${esc(s.from.name)} <span class="src-arrow">→</span> <b>#${s.to.id}</b> ${esc(s.to.name)}</td>
+      <td>${allergens}</td><td>${s.minutes} 分钟</td><td>${s.cumulative_minutes} 分钟</td></tr>`;
+  }).join('');
+  $('changeover-result').innerHTML = `<div class="result-block">
+    <h3>最优生产顺序 <span class="pill green">总清洁时间 ${r.total_minutes} 分钟</span></h3>
+    <p>${orderText}</p>${tie}
+    <table><tr><th style="width:3em">段</th><th>换线</th><th>需清洁过敏原（分钟）</th>
+      <th style="width:7em">本段耗时</th><th style="width:7em">累计耗时</th></tr>${rows}</table>
+    <p class="hint">首产产品无换线清洁；换线成本按「前一产品含有、后一产品不含」的过敏原
+      清洁分钟数求和。本结果仅为预览，未改写任何审查记录。</p></div>`;
+  $('changeover-result').scrollIntoView({behavior: 'smooth'});
+}
+
+/* ---------- 共用标签模板分组（临时预览） ---------- */
+let tplProducts = [];
+let tplSelected = new Set();
+let tplLimits = {};   // 产品ID -> 附加声明上限输入框当前值（跨渲染保留）
+const TPL_DEFAULT_MAX_EXTRA = 1;
+
+async function loadTemplateProducts() {
+  try {
+    const d = await api('/api/template-group/products');
+    tplProducts = d.products;
+    renderTemplateProducts();
+  } catch (e) {
+    $('tpl-products').innerHTML =
+      `<p class="error">候选产品加载失败：${esc(e.message)}</p>`;
+  }
+}
+
+function renderTemplateProducts() {
+  const wrap = $('tpl-products');
+  if (!tplProducts.length) {
+    wrap.innerHTML = '<p class="hint">暂无历史审查记录，请先在「③ 新建标签审查」创建。</p>';
+    renderTplLimits();
+    return;
+  }
+  // 仅保留仍然存在且可参与的勾选
+  const eligible = new Set(tplProducts.filter(p => p.eligible).map(p => p.id));
+  tplSelected = new Set([...tplSelected].filter(id => eligible.has(id)));
+  const rows = tplProducts.map(p => {
+    const allergens = p.allergens.length
+      ? p.allergens.map(a => `<span class="badge">${esc(a)}</span>`).join('')
+      : '<span class="hint">无过敏原</span>';
+    const cb = p.eligible
+      ? `<input type="checkbox" value="${p.id}" ${tplSelected.has(p.id) ? 'checked' : ''} onchange="onTplSelect()">`
+      : `<input type="checkbox" disabled title="${esc(p.blocked_reason)}">`;
+    const state = p.eligible
+      ? '<span class="pill green" title="字典时效正常">可参与</span>'
+      : `<span class="pill orange" title="${esc(p.blocked_reason)}">禁止参与</span>`;
+    const note = p.eligible ? '' : `<div class="warn">⚠ ${esc(p.blocked_reason)}</div>`;
+    return `<tr><td>${cb}</td><td>#${p.id}</td><td>${esc(p.name)}${note}</td>
+      <td class="hint">${esc(p.source_version)}</td><td>${allergens}</td><td>${state}</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table><tr><th style="width:40px">选择</th><th style="width:3.5em">ID</th>
+    <th>产品（审查记录）</th><th style="width:6.5em">取值版本</th>
+    <th>当前配方最终过敏原集合</th><th style="width:5.5em">状态</th></tr>${rows}</table>
+    <p class="hint">已选 <b id="tpl-count">${tplSelected.size}</b> 个（需 2～12 个）；
+      「取值版本」为记录的标签核对对象（两版记录即新版配方）。</p>`;
+  renderTplLimits();
+}
+
+function onTplSelect() {
+  tplSelected = new Set(
+    [...document.querySelectorAll('#tpl-products input[type=checkbox]:checked')]
+      .map(i => Number(i.value)));
+  const cnt = $('tpl-count');
+  if (cnt) cnt.textContent = tplSelected.size;
+  renderTplLimits();
+}
+
+function captureTplLimits() {
+  document.querySelectorAll('#tpl-limits input').forEach(i => {
+    tplLimits[i.dataset.pid] = i.value;
+  });
+}
+
+function renderTplLimits() {
+  captureTplLimits();
+  const wrap = $('tpl-limits-wrap');
+  const selected = tplProducts.filter(p => tplSelected.has(p.id))
+    .sort((a, b) => a.id - b.id);
+  if (!selected.length) {
+    wrap.classList.add('hidden');
+    $('tpl-limits').innerHTML = '';
+    return;
+  }
+  wrap.classList.remove('hidden');
+  $('tpl-limits').innerHTML = selected.map(p => {
+    const v = tplLimits[p.id] !== undefined
+      ? tplLimits[p.id] : TPL_DEFAULT_MAX_EXTRA;
+    return `<label><span>#${p.id} ${esc(p.name)}</span><input type="number" min="0" step="1"
+      value="${esc(String(v))}" data-pid="${p.id}"></label>`;
+  }).join('');
+}
+
+async function submitTemplateGroup() {
+  $('tpl-msg').textContent = '';
+  $('tpl-result').innerHTML = '';
+  captureTplLimits();
+  const ids = [...tplSelected];
+  if (ids.length < 2 || ids.length > 12) {
+    $('tpl-msg').textContent = `请勾选 2～12 个产品（当前 ${ids.length} 个）`;
+    return;
+  }
+  const maxExtra = {};
+  for (const pid of ids) {
+    const raw = tplLimits[pid];
+    const v = Number(raw);
+    if (raw === undefined || String(raw).trim() === ''
+        || !Number.isInteger(v) || v < 0) {
+      $('tpl-msg').textContent =
+        `产品 #${pid} 的附加声明上限无效（需为不小于 0 的整数）`;
+      return;
+    }
+    maxExtra[pid] = v;
+  }
+  try {
+    const r = await post('/api/template-group-preview',
+      {review_ids: ids, max_extra: maxExtra});
+    renderTemplateResult(r);
+  } catch (e) {
+    $('tpl-msg').textContent = e.message;
+    const problems = (e.detail && e.detail.problems) || [];
+    if (problems.length) {
+      $('tpl-result').innerHTML = `<div class="result-block"><h3>禁止参与的记录</h3>
+        <table><tr><th style="width:4em">ID</th><th>产品</th><th>原因</th></tr>
+        ${problems.map(p => `<tr><td>#${esc(String(p.id))}</td>
+          <td>${esc(p.name || '（未知）')}</td>
+          <td class="error">${esc(p.message)}</td></tr>`).join('')}</table></div>`;
+    }
+    await loadTemplateProducts();  // 刷新资格状态（记录可能刚被复核或删除）
+  }
+}
+
+function renderTemplateResult(r) {
+  const tie = r.optimal_count > 1
+    ? `<p class="hint">共有 ${r.optimal_count} 个模板数量相同的并列最优分组，已按组内及组间产品 ID 序列展示唯一确定者。</p>`
+    : '';
+  const groupsHtml = r.groups.map((g, gi) => {
+    const rows = g.members.map(m => {
+      const own = m.allergens.length
+        ? m.allergens.map(a => `<span class="badge">${esc(a)}</span>`).join('')
+        : '<span class="hint">无</span>';
+      const extra = m.extra.length
+        ? m.extra.map(a => `<span class="badge over">${esc(a)}</span>`).join('')
+        : '<span class="hint">无</span>';
+      return `<tr><td>#${m.id}</td><td>${esc(m.name)}</td><td>${own}</td>
+        <td>${extra}</td><td>${m.extra_count} / ${m.max_extra}</td></tr>`;
+    }).join('');
+    const template = g.template.length
+      ? g.template.map(a => `<span class="badge own">${esc(a)}</span>`).join('')
+      : '<span class="hint">无过敏原</span>';
+    return `<h4>模板 ${gi + 1}（${g.members.length} 个产品）：${template}</h4>
+      <table><tr><th style="width:4em">ID</th><th>产品</th><th>自身过敏原</th>
+      <th>附加声明</th><th style="width:8em">附加数 / 上限</th></tr>${rows}</table>`;
+  }).join('');
+  $('tpl-result').innerHTML = `<div class="result-block">
+    <h3>最少模板分组 <span class="pill green">共需 ${r.template_count} 张模板</span></h3>
+    ${tie}${groupsHtml}
+    <p class="hint">模板 = 组内产品过敏原并集；附加声明 = 模板含有而产品自身没有、需额外印上
+      标签的过敏原（附加数不超过上限才可成组）。本结果仅为预览，未改写任何审查记录。</p></div>`;
+  $('tpl-result').scrollIntoView({behavior: 'smooth'});
+}
+
+/* ---------- 目标过敏原最小改配方案（临时预览） ---------- */
+let refRecords = [];
+let refSelectedId = null;
+let refSources = null;
+let refCosts = {};   // 完整节点路径 key（用 ‹ 连接）-> 输入框当前值（跨渲染保留）
+
+async function loadReformulationRecords() {
+  try {
+    const d = await api('/api/reformulation/records');
+    refRecords = d.records;
+    renderReformulationRecords();
+  } catch (e) {
+    $('ref-records').innerHTML =
+      `<p class="error">候选记录加载失败：${esc(e.message)}</p>`;
+  }
+}
+
+function renderReformulationRecords() {
+  const wrap = $('ref-records');
+  if (!refRecords.length) {
+    wrap.innerHTML = '<p class="hint">暂无历史审查记录，请先在「③ 新建标签审查」创建。</p>';
+    refSelectedId = null;
+    renderRefSetup();
+    return;
+  }
+  // 选中记录被删除后清空选择（需复核记录本就无法选中）
+  if (!refRecords.some(r => r.id === refSelectedId)) refSelectedId = null;
+  const rows = refRecords.map(r => {
+    const allergens = r.allergens.length
+      ? r.allergens.map(a => `<span class="badge">${esc(a)}</span>`).join('')
+      : '<span class="hint">无过敏原</span>';
+    const rb = r.eligible
+      ? `<input type="radio" name="ref-record" value="${r.id}" ${refSelectedId === r.id ? 'checked' : ''} onchange="onRefSelect()">`
+      : `<input type="radio" disabled title="${esc(r.blocked_reason)}">`;
+    const state = r.eligible
+      ? '<span class="pill green" title="字典时效正常">可选择</span>'
+      : `<span class="pill orange" title="${esc(r.blocked_reason)}">禁止选择</span>`;
+    const note = r.eligible ? '' : `<div class="warn">⚠ ${esc(r.blocked_reason)}</div>`;
+    return `<tr><td>${rb}</td><td>#${r.id}</td><td>${esc(r.name)}${note}</td>
+      <td class="hint">${esc(r.source_version)}</td><td>${allergens}</td><td>${state}</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table><tr><th style="width:40px">选择</th><th style="width:3.5em">ID</th>
+    <th>审查记录</th><th style="width:6.5em">取值版本</th><th>当前配方最终过敏原集合</th><th style="width:5.5em">状态</th></tr>${rows}</table>
+    <p class="hint">仅可单选 1 条时效正常记录；「取值版本」为记录的标签核对对象（两版记录即新版配方）。</p>`;
+  renderRefSetup();
+}
+
+function onRefSelect() {
+  const checked = document.querySelector('#ref-records input[name=ref-record]:checked');
+  refSelectedId = checked ? Number(checked.value) : null;
+  // 切换记录后清空过敏原、来源、成本与结果
+  refSources = null;
+  refCosts = {};
+  $('ref-result').innerHTML = '';
+  $('ref-sources-wrap').classList.add('hidden');
+  renderRefSetup();
+}
+
+function selectedRefRecord() {
+  return refRecords.find(r => r.id === refSelectedId && r.eligible) || null;
+}
+
+function renderRefSetup() {
+  const wrap = $('ref-setup-wrap');
+  const r = selectedRefRecord();
+  if (!r) {
+    wrap.classList.add('hidden');
+    $('ref-allergens').innerHTML = '';
+    return;
+  }
+  const prevAllergen = selectedRefAllergen();
+  wrap.classList.remove('hidden');
+  $('ref-allergens').innerHTML = r.allergens.length
+    ? r.allergens.map(a =>
+        `<label><input type="radio" name="ref-allergen" value="${esc(a)}"
+           ${a === prevAllergen ? 'checked' : ''} onchange="onRefAllergenChange()">
+         ${esc(a)}</label>`).join('')
+    : '<span class="hint">该记录当前配方不含任何过敏原。</span>';
+}
+
+function onRefAllergenChange() {
+  // 切换过敏原后清空旧的来源、成本与结果，等待重新载入
+  refSources = null;
+  refCosts = {};
+  $('ref-result').innerHTML = '';
+  $('ref-sources-wrap').classList.add('hidden');
+  $('ref-setup-msg').textContent = '';
+}
+
+function selectedRefAllergen() {
+  const checked = document.querySelector('#ref-allergens input[name=ref-allergen]:checked');
+  return checked ? checked.value : null;
+}
+
+async function loadReformulationSources() {
+  $('ref-setup-msg').textContent = '';
+  $('ref-result').innerHTML = '';
+  if (!refSelectedId) {
+    $('ref-setup-msg').textContent = '请先选择一条时效正常的记录';
+    return;
+  }
+  const allergen = selectedRefAllergen();
+  if (!allergen) {
+    $('ref-setup-msg').textContent = '请先选择一个目标过敏原';
+    return;
+  }
+  try {
+    refSources = await post('/api/reformulation/sources',
+      {review_id: refSelectedId, allergen});
+    refCosts = {};
+    renderRefSources();
+  } catch (e) {
+    $('ref-sources-wrap').classList.add('hidden');
+    $('ref-setup-msg').textContent = e.message;
+    await loadReformulationRecords();  // 刷新资格状态（记录可能刚被复核或删除）
+  }
+}
+
+const refPathKey = path => path.join('‹');
+
+function refPathHtml(path) {
+  return path.map((part, i) =>
+    `<span${i === path.length - 1 ? ' class="src-leaf"' : ''}>${esc(part)}</span>`
+  ).join('<span class="src-arrow"> › </span>');
+}
+
+function renderRefSources() {
+  const s = refSources;
+  $('ref-sources-wrap').classList.remove('hidden');
+  $('ref-source-list').innerHTML =
+    `<b>${esc(s.allergen)}</b> 在「${esc(s.review.name)}」当前配方树（${esc(s.review.source_version)}）中共有
+     <b>${s.sources.length}</b> 条来源路径：
+     <ul class="src-paths">${s.sources.map(p => `<li>${refPathHtml(p)}</li>`).join('')}</ul>`;
+  // 候选节点按完整路径字典序；「来源」徽章表示该节点自身携带目标过敏原
+  const rows = s.candidate_nodes.map(n => {
+    const key = refPathKey(n.path);
+    const v = refCosts[key] !== undefined ? refCosts[key] : '';
+    return `<tr>
+      <td>${refPathHtml(n.path)}${n.is_source
+        ? ' <span class="badge miss" title="该节点自身携带目标过敏原">来源</span>' : ''}</td>
+      <td><input type="number" min="0" step="any" value="${esc(String(v))}"
+        data-path="${esc(key)}" placeholder="不可替换" style="width:120px"></td></tr>`;
+  }).join('');
+  $('ref-costs').innerHTML =
+    `<table><tr><th>完整节点路径</th><th style="width:160px">可替换成本（留空 = 不可替换）</th></tr>${rows}</table>`;
+  $('ref-sources-wrap').scrollIntoView({behavior: 'smooth'});
+}
+
+function captureRefCosts() {
+  document.querySelectorAll('#ref-costs input').forEach(i => {
+    refCosts[i.dataset.path] = i.value;
+  });
+}
+
+async function submitReformulation() {
+  $('ref-msg').textContent = '';
+  $('ref-result').innerHTML = '';
+  if (!refSources) return;
+  captureRefCosts();
+  const costs = [];
+  for (const n of refSources.candidate_nodes) {
+    const raw = refCosts[refPathKey(n.path)];
+    if (raw === undefined || String(raw).trim() === '') continue;
+    const v = Number(raw);
+    if (!isFinite(v) || v < 0) {
+      $('ref-msg').textContent =
+        `节点「${n.path.join(' › ')}」的可替换成本无效（需为不小于 0 的数字）`;
+      return;
+    }
+    costs.push({path: n.path, cost: v});
+  }
+  try {
+    const r = await post('/api/reformulation-plan-preview',
+      {review_id: refSources.review.id, allergen: refSources.allergen, costs});
+    renderReformulationResult(r);
+  } catch (e) {
+    $('ref-msg').textContent = e.message;
+    const problems = (e.detail && e.detail.problems) || [];
+    if (problems.length) {
+      $('ref-result').innerHTML = `<div class="result-block"><h3>禁止选择的记录</h3>
+        <table><tr><th style="width:4em">ID</th><th>记录</th><th>原因</th></tr>
+        ${problems.map(p => `<tr><td>#${esc(String(p.id))}</td>
+          <td>${esc(p.name || '（未知）')}</td>
+          <td class="error">${esc(p.message)}</td></tr>`).join('')}</table></div>`;
+    }
+    await loadReformulationRecords();  // 刷新资格状态（记录可能刚被复核或删除）
+  }
+}
+
+function renderReformulationResult(r) {
+  if (!r.feasible) {
+    $('ref-result').innerHTML = `<div class="result-block">
+      <h3>无可行改配方案 <span class="pill red">${r.uncoverable_sources.length} 条来源不可覆盖</span></h3>
+      <p class="error">下列来源路径上的节点均未填写可替换成本，无法通过替换任何节点阻断这些来源：</p>
+      <ul class="src-paths">${r.uncoverable_sources.map(p => `<li>${refPathHtml(p)}</li>`).join('')}</ul>
+      <p class="hint">请为这些路径上的至少一个节点填写可替换成本后重新计算。</p></div>`;
+  } else {
+    const tie = r.optimal_count > 1
+      ? `<p class="hint">共有 ${r.optimal_count} 个总成本相同的并列最优方案，已按所选节点路径序列展示字典序最小者。</p>`
+      : '';
+    const sels = r.selections.map((sel, i) => {
+      const blocked = sel.blocked_sources.map(p => `<li>${refPathHtml(p)}</li>`).join('');
+      return `<tr><td>${i + 1}</td><td>${refPathHtml(sel.path)}</td>
+        <td>${sel.cost}</td>
+        <td>${sel.blocked_count}
+          <details class="src-detail"><summary>查看阻断的来源</summary>
+            <ul class="src-paths">${blocked}</ul></details></td></tr>`;
+    }).join('');
+    $('ref-result').innerHTML = `<div class="result-block">
+      <h3>最小改配方案 <span class="pill green">总成本 ${r.total_cost}</span>
+        <span class="pill blue">${r.selections.length} 个替换节点</span></h3>
+      ${tie}
+      <table><tr><th style="width:3em">#</th><th>替换节点（完整路径）</th>
+        <th style="width:8em">替换成本</th><th style="width:14em">阻断来源</th></tr>${sels}</table>
+      <p class="hint">所选节点互为反链：选择祖先节点已同时阻断其子树中的全部来源，故方案不再包含其后代；
+        全部 ${r.sources.length} 条来源路径均被覆盖。本结果仅为预览，未改写任何审查记录。</p></div>`;
+  }
+  $('ref-result').scrollIntoView({behavior: 'smooth'});
+}
+
+/* ---------- 过敏原检测套餐规划（临时预览） ---------- */
+let panelRecords = [];
+let panelSelectedId = null;
+
+async function loadPanelRecords() {
+  try {
+    const d = await api('/api/allergen-panel/records');
+    panelRecords = d.records;
+    renderPanelRecords();
+  } catch (e) {
+    $('panel-records').innerHTML =
+      `<p class="error">候选记录加载失败：${esc(e.message)}</p>`;
+  }
+}
+
+function renderPanelRecords() {
+  const wrap = $('panel-records');
+  if (!panelRecords.length) {
+    wrap.innerHTML = '<p class="hint">暂无历史审查记录，请先在「③ 新建标签审查」创建。</p>';
+    panelSelectedId = null;
+    renderPanelSetup();
+    return;
+  }
+  // 选中记录被删除或转为需复核后清空选择
+  if (!panelRecords.some(r => r.id === panelSelectedId && r.eligible)) {
+    panelSelectedId = null;
+  }
+  const rows = panelRecords.map(r => {
+    const allergens = r.allergens.length
+      ? r.allergens.map(a => `<span class="badge">${esc(a)}</span>`).join('')
+      : '<span class="hint">无过敏原</span>';
+    const rb = r.eligible
+      ? `<input type="radio" name="panel-record" value="${r.id}" ${panelSelectedId === r.id ? 'checked' : ''} onchange="onPanelSelect()">`
+      : `<input type="radio" disabled title="${esc(r.blocked_reason)}">`;
+    const state = r.eligible
+      ? '<span class="pill green" title="字典时效正常">可选择</span>'
+      : `<span class="pill orange" title="${esc(r.blocked_reason)}">禁止选择</span>`;
+    const note = r.eligible ? '' : `<div class="warn">⚠ ${esc(r.blocked_reason)}</div>`;
+    return `<tr><td>${rb}</td><td>#${r.id}</td><td>${esc(r.name)}${note}</td>
+      <td class="hint">${esc(r.source_version)}</td><td>${allergens}</td><td>${state}</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table><tr><th style="width:40px">选择</th><th style="width:3.5em">ID</th>
+    <th>审查记录</th><th style="width:6.5em">取值版本</th><th>当前配方最终过敏原（必须覆盖项）</th>
+    <th style="width:5.5em">状态</th></tr>${rows}</table>
+    <p class="hint">仅可单选 <b>1 条</b>时效正常记录；「取值版本」为记录的标签核对对象（两版记录即新版配方）。</p>`;
+  renderPanelSetup();
+}
+
+function onPanelSelect() {
+  const checked = document.querySelector('#panel-records input[name=panel-record]:checked');
+  panelSelectedId = checked ? Number(checked.value) : null;
+  // 切换记录后清空结果
+  $('panel-result').innerHTML = '';
+  $('panel-msg').textContent = '';
+  renderPanelSetup();
+}
+
+function selectedPanelRecord() {
+  return panelRecords.find(r => r.id === panelSelectedId && r.eligible) || null;
+}
+
+function renderPanelSetup() {
+  const wrap = $('panel-setup-wrap');
+  const r = selectedPanelRecord();
+  if (!r) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  $('panel-required').innerHTML =
+    `「<b>${esc(r.name)}</b>」（#${r.id}，取值版本：${esc(r.source_version)}）当前配方最终过敏原 —— `
+    + (r.allergens.length
+      ? '套餐组合<b>必须覆盖</b>：' + r.allergens.map(a => `<span class="badge miss">${esc(a)}</span>`).join('')
+      : '<span class="hint">不含任何过敏原，空组合即完成覆盖。</span>');
+}
+
+async function submitPanelPlan() {
+  $('panel-msg').textContent = '';
+  $('panel-result').innerHTML = '';
+  if (!panelSelectedId) {
+    $('panel-msg').textContent = '请先选择一条时效正常的记录';
+    return;
+  }
+  if (!$('panel-packages').value.trim()) {
+    $('panel-msg').textContent = '请逐行录入候选套餐（套餐名：价格：过敏原列表）';
+    return;
+  }
+  try {
+    const r = await post('/api/allergen-panel-preview',
+      {review_id: panelSelectedId, packages_text: $('panel-packages').value});
+    renderPanelResult(r);
+  } catch (e) {
+    $('panel-msg').textContent = e.message;
+    const problems = (e.detail && e.detail.problems) || [];
+    const lineProblems = problems.filter(p => typeof p.line === 'number');
+    const recProblems = problems.filter(p => typeof p.id !== 'undefined');
+    let html = '';
+    if (recProblems.length) {
+      html += `<div class="result-block"><h3>禁止选择的记录</h3>
+        <table><tr><th style="width:4em">ID</th><th>记录</th><th>原因</th></tr>
+        ${recProblems.map(p => `<tr><td>#${esc(String(p.id))}</td>
+          <td>${esc(p.name || '（未知）')}</td>
+          <td class="error">${esc(p.message)}</td></tr>`).join('')}</table></div>`;
+    }
+    if (lineProblems.length) {
+      html += `<div class="result-block"><h3>套餐录入有误
+          <span class="pill red">${lineProblems.length} 行</span></h3>
+        <table><tr><th style="width:5em">行号</th><th>问题</th></tr>
+        ${lineProblems.map(p => `<tr><td>第 ${p.line} 行</td>
+          <td class="error">${esc(p.message)}</td></tr>`).join('')}</table>
+        <p class="hint">整批未参与计算，修正全部问题后重试。</p></div>`;
+    }
+    $('panel-result').innerHTML = html;
+    if (recProblems.length) await loadPanelRecords();  // 刷新资格状态（记录可能刚被删除 / 转需复核）
+  }
+}
+
+function panelBadges(arr, cls) {
+  return arr.length
+    ? arr.map(a => `<span class="badge ${cls || ''}">${esc(a)}</span>`).join('')
+    : '<span class="hint">无</span>';
+}
+
+function renderPanelResult(r) {
+  let head = `<div class="result-block">
+    <h3>必须覆盖的当前配方最终过敏原（${esc(r.review.name)} #${r.review.id} · ${esc(r.review.source_version)}）</h3>
+    <p>${panelBadges(r.required_allergens, 'miss')}</p></div>`;
+
+  const pkgRows = r.packages.map(p => {
+    const extra = p.extra_allergens.length
+      ? p.extra_allergens.map(a => `<span class="badge over">${esc(a)}</span>`).join('')
+      : '<span class="hint">无</span>';
+    return `<tr><td>${esc(p.name)}</td><td>${p.price}</td>
+      <td>${panelBadges(p.covers_required)}</td><td>${extra}</td></tr>`;
+  }).join('');
+  head += `<div class="result-block"><h3>录入套餐（共 ${r.packages.length} 个）</h3>
+    <table><tr><th style="width:24%">套餐名</th><th style="width:7em">价格</th>
+    <th>覆盖的必须项</th><th>额外过敏原（不影响可行性）</th></tr>${pkgRows}</table></div>`;
+
+  if (!r.feasible) {
+    head += `<div class="result-block">
+      <h3>无法覆盖全部必须项 <span class="pill red">缺口 ${r.uncovered.length} 项</span></h3>
+      <p class="error">任何套餐组合都无法覆盖下列过敏原（没有任何录入套餐包含它们）：</p>
+      <p>${panelBadges(r.uncovered, 'miss')}</p>
+      <p class="hint">请补充包含上述过敏原的套餐行后重新计算。</p></div>`;
+    $('panel-result').innerHTML = head;
+    $('panel-result').scrollIntoView({behavior: 'smooth'});
+    return;
+  }
+
+  const tie = r.optimal_count > 1
+    ? `<p class="hint">共有 ${r.optimal_count} 个总价相同的并列最优套餐组合（含覆盖必须项但不新增覆盖的 0 元选择），已按套餐名序列字典序展示唯一确定者。</p>`
+    : '';
+  const selRows = r.selections.map((s, i) => {
+    const contrib = s.contribution.length
+      ? s.contribution.map(a => `<span class="badge own">${esc(a)}</span>`).join('')
+      : '<span class="hint">无新增覆盖</span>';
+    const extra = s.extra_allergens.length
+      ? s.extra_allergens.map(a => `<span class="badge over">${esc(a)}</span>`).join('')
+      : '<span class="hint">无</span>';
+    return `<tr><td>${i + 1}</td><td><b>${esc(s.name)}</b></td><td>${s.price}</td>
+      <td>${contrib}</td><td>${panelBadges(s.cumulative_covered, 'ok')}</td><td>${extra}</td></tr>`;
+  }).join('');
+  const orderText = r.selections.map(s => `<b>${esc(s.name)}</b>`)
+    .join(' <span class="src-arrow">+</span> ') || '<span class="hint">空组合（必须项为空）</span>';
+  let body = `<div class="result-block">
+    <h3>最低总价套餐组合 <span class="pill green">总价 ${r.total_price}</span>
+      <span class="pill blue">${r.selections.length} 个套餐</span></h3>
+    <p>${orderText}</p>${tie}
+    <table><tr><th style="width:3em">顺序</th><th style="width:20%">套餐名</th>
+      <th style="width:7em">价格</th><th>本套餐覆盖贡献（新覆盖项）</th>
+      <th>选到本套餐的累计覆盖</th><th>额外过敏原</th></tr>${selRows}</table>`;
+  if (r.unused_packages.length) {
+    body += `<p class="hint">以下套餐不含任何必须覆盖项，未参与组合：
+      ${r.unused_packages.map(p => esc(p.name)).join('、')}</p>`;
+  }
+  body += `<p class="hint">价格经精确小数运算，0.1 + 0.2 与 0.3 等情形不会因浮点误差漏判并列；
+    本结果仅为预览，套餐与审查记录均未写库。</p></div>`;
+  $('panel-result').innerHTML = head + body;
+  $('panel-result').scrollIntoView({behavior: 'smooth'});
+}
+
+function fillPanelDemo() {
+  $('panel-packages').value =
+    '基础套餐：9.90：麸质谷物，蛋类\n'
+    + '乳品专项：10.00：乳\n'
+    + '大豆加购：5.00：大豆\n'
+    + '坚果加购：6.00：坚果\n'
+    + '全素套餐：15.80：麸质谷物，大豆，蛋类\n'
+    + '尊享全包：30.00：麸质谷物，乳，大豆，蛋类，坚果，芝麻\n'
+    + '鱼贝类单项：8.00：鱼类，甲壳类';
+  $('panel-msg').textContent = '示例已填充：选择一条含乳/大豆/蛋类/麸质谷物的记录后计算，可看到精确比价与覆盖贡献';
+}
+
+/* ---------- 示例 ---------- */
+async function fillDemo() {
+  $('bulk-text').value = DEMO_DICT;
+  $('text-a').value = DEMO_A;
+  $('text-b').value = DEMO_B;
+  $('review-name').value = '巧克力饼干 配方变更审查';
+  await importBulk();
+  document.querySelectorAll('#declared-box input').forEach(i => {
+    i.checked = ['麸质谷物', '蛋类'].includes(i.value);
+  });
+  $('dict-msg').textContent = '示例已填充，点击“开始审查”查看效果';
+}
+
+loadDict().then(() => Promise.all([loadHistory(), loadAliases()]))
+  .catch(e => alert('初始化失败：' + e.message));
+</script>
+</body>
+</html>
