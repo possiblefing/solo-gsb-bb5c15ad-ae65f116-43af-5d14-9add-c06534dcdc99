@@ -314,3 +314,91 @@ def list_reviews() -> List[dict]:
 def delete_review(rid: int) -> None:
     with _lock, _connect() as conn:
         conn.execute("DELETE FROM reviews WHERE id = ?", (rid,))
+
+
+# ---------- 审查数据迁移包 ----------
+
+def export_snapshot() -> dict:
+    """全量读取三张表（只读），供迁移包导出使用。
+
+    字典按原料名、别名按归一化别名（alias_key）、审查记录按 ID 排序，
+    同一数据库重复读取顺序稳定。
+    """
+    with _lock, _connect() as conn:
+        d = conn.execute(
+            "SELECT ingredient, allergens, updated_at FROM allergen_dict "
+            "ORDER BY ingredient").fetchall()
+        a = conn.execute(
+            "SELECT alias_name, target_name, updated_at FROM ingredient_aliases "
+            "ORDER BY alias_key").fetchall()
+        r = conn.execute(
+            "SELECT id, name, declared, text_a, text_b, label_a, label_b, "
+            "result, created_at, dict_fingerprint FROM reviews ORDER BY id"
+        ).fetchall()
+    return {
+        "dict": [{"ingredient": row["ingredient"],
+                  "allergens": json.loads(row["allergens"]),
+                  "updated_at": row["updated_at"]} for row in d],
+        "aliases": [{"alias": row["alias_name"], "target": row["target_name"],
+                     "updated_at": row["updated_at"]} for row in a],
+        "reviews": [{"id": row["id"], "name": row["name"],
+                     "declared": json.loads(row["declared"]),
+                     "text_a": row["text_a"], "text_b": row["text_b"],
+                     "label_a": row["label_a"], "label_b": row["label_b"],
+                     "result": json.loads(row["result"]),
+                     "created_at": row["created_at"],
+                     "dict_fingerprint": row["dict_fingerprint"]}
+                    for row in r],
+    }
+
+
+def table_counts() -> dict:
+    """三张表当前行数（迁移包预检展示用，只读）。"""
+    with _lock, _connect() as conn:
+        return {
+            "dict": conn.execute(
+                "SELECT COUNT(*) AS c FROM allergen_dict").fetchone()["c"],
+            "aliases": conn.execute(
+                "SELECT COUNT(*) AS c FROM ingredient_aliases").fetchone()["c"],
+            "reviews": conn.execute(
+                "SELECT COUNT(*) AS c FROM reviews").fetchone()["c"],
+        }
+
+
+def replace_all(*, dict_entries: List[dict], aliases: List[dict],
+                reviews: List[dict]) -> None:
+    """在**单个 SQLite 事务**内整体替换三张表；任一步失败整体回滚。
+
+    调用方必须先通过 :func:`app.migration.validate_package` 校验。
+    记录 ID、创建 / 更新时间、字典指纹均按迁移包原样保留，因此导入后
+    再导出的摘要与导入前一致。``with conn:`` 正常退出时提交、异常时
+    回滚，保证「整体替换」要么全部生效、要么完全不生效。
+    """
+    with _lock, _connect() as conn:
+        conn.execute("DELETE FROM reviews")
+        conn.execute("DELETE FROM ingredient_aliases")
+        conn.execute("DELETE FROM allergen_dict")
+        for e in dict_entries:
+            conn.execute(
+                "INSERT INTO allergen_dict (ingredient, allergens, updated_at) "
+                "VALUES (?, ?, ?)",
+                (e["ingredient"],
+                 json.dumps(e["allergens"], ensure_ascii=False),
+                 e["updated_at"]))
+        for e in aliases:
+            conn.execute(
+                "INSERT INTO ingredient_aliases "
+                "(alias_key, alias_name, target_key, target_name, updated_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (normalize_name(e["alias"]), e["alias"],
+                 normalize_name(e["target"]), e["target"], e["updated_at"]))
+        for r in reviews:
+            conn.execute(
+                "INSERT INTO reviews (id, name, declared, text_a, text_b, "
+                "label_a, label_b, result, created_at, dict_fingerprint) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (r["id"], r["name"],
+                 json.dumps(r["declared"], ensure_ascii=False),
+                 r["text_a"], r["text_b"], r["label_a"], r["label_b"],
+                 json.dumps(r["result"], ensure_ascii=False),
+                 r["created_at"], r["dict_fingerprint"]))

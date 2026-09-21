@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
@@ -28,6 +29,8 @@ from .allergen_panel import PanelError, build_panel_preview, list_panel_records
 from .analysis import flatten, normalize_name
 from .changeover import (ChangeoverError, build_changeover_preview,
                          list_changeover_products)
+from .migration import (MigrationConfirmError, build_export, confirm_import,
+                        precheck_package)
 from .parser import parse_recipe
 from .proportion import analyze_proportions
 from .recheck import build_recheck
@@ -132,6 +135,15 @@ class ReformulationPreview(BaseModel):
 class PanelPreview(BaseModel):
     review_id: int
     packages_text: str = ""
+
+
+class MigrationPrecheckRequest(BaseModel):
+    text: str
+
+
+class MigrationImportRequest(BaseModel):
+    token: str
+    text: str
 
 
 # ---------- 页面 ----------
@@ -499,3 +511,53 @@ def review_report(rid: int, format: str = Query("html", pattern="^(html|md)$")):
         headers={"Content-Disposition":
                  f'attachment; filename="allergen_review_{rid}.html"'},
     )
+
+
+# ---------- 审查数据迁移包 ----------
+
+@app.get("/api/migration/export")
+def migration_export():
+    """全量导出迁移包（只读）。
+
+    单个 JSON 文件包含过敏原字典、原料别名、全部审查记录、格式版本号与
+    按规范化内容（键排序的紧凑 JSON）计算的 SHA-256 摘要；列表字段排序、
+    条目按主键排序，同一数据库重复导出内容稳定（摘要一致）。
+    """
+    package = build_export()
+    return Response(
+        json.dumps(package, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition":
+                 f'attachment; filename="allergen_migration_'
+                 f'{package["sha256"][:12]}.json"'},
+    )
+
+
+@app.post("/api/migration/precheck")
+def migration_precheck(payload: MigrationPrecheckRequest):
+    """迁移包只读预检（不写库）。
+
+    逐项校验格式版本、SHA-256 摘要、字段类型、别名图无环（含自环与
+    归一化重复）与审查记录结构，全部问题一次返回；全部通过时签发
+    **绑定该文件摘要的一次性确认令牌**（限时有效），并返回包内数据量、
+    当前库数据量与警告，供页面展示后由用户确认。
+    """
+    if not payload.text.strip():
+        raise HTTPException(400, "迁移包内容不能为空")
+    return precheck_package(payload.text)
+
+
+@app.post("/api/migration/import")
+def migration_import(payload: MigrationImportRequest):
+    """凭一次性令牌确认导入：单个 SQLite 事务整体替换，失败整体回滚。
+
+    令牌必须来自对**同一份文件内容**的预检（绑定其 SHA-256），且只能
+    使用一次；令牌无效 / 过期 / 摘要不匹配或校验未通过时返回 400，
+    ``detail.problems`` 逐项给出原因，均不写库。
+    """
+    try:
+        return confirm_import(payload.text, payload.token)
+    except MigrationConfirmError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": str(exc), "problems": exc.problems})

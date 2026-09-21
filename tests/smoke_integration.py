@@ -602,4 +602,68 @@ assert db.get_review(panel_rid) == before_panel
 assert db.get_review(milk_rid) == before_milk
 print("12. 过敏原检测套餐规划（当前配方必须项/精确小数/子集DP/字典序并列/缺口/禁止选择/只读） OK")
 
+# 13. 审查数据迁移包（导出 / 只读预检 / 一次性令牌确认导入 / 事务回滚）
+import json as _json
+
+from app.migration import (MigrationConfirmError, build_export, confirm_import,
+                           package_digest, precheck_package)
+
+# 13a. 导出：三段数据 + 格式版本 + 规范化 SHA-256；同一数据库重复导出内容稳定
+pkg_a, pkg_b = build_export(), build_export()
+assert pkg_a == pkg_b and pkg_a["sha256"] == pkg_b["sha256"]
+assert pkg_a["format"] == "allergen-review-migration" and pkg_a["version"] == 1
+assert pkg_a["sha256"] == package_digest(pkg_a)
+assert pkg_a["counts"] == {"dict": len(db.list_dict()),
+                           "aliases": len(db.list_aliases()),
+                           "reviews": len(db.list_reviews())}
+pkg_text = _json.dumps(pkg_a, ensure_ascii=False, sort_keys=True)
+
+# 13b. 预检只读：篡改内容 -> 摘要不匹配；别名成环逐项返回；库不变
+before = db.export_snapshot()
+tampered = _json.loads(pkg_text)
+tampered["data"]["reviews"][0]["name"] = "被篡改"
+out = precheck_package(_json.dumps(tampered, ensure_ascii=False))
+assert not out["ok"] and any(p["type"] == "digest_mismatch" for p in out["problems"])
+cycled = _json.loads(pkg_text)
+cycled["data"]["aliases"] = [
+    {"alias": "甲", "target": "乙", "updated_at": "t"},
+    {"alias": "乙", "target": "甲", "updated_at": "t"}]
+cycled["sha256"] = package_digest(cycled)
+out = precheck_package(_json.dumps(cycled, ensure_ascii=False))
+assert any(p["type"] == "cycle" for p in out["problems"])
+assert db.export_snapshot() == before  # 预检绝不写库
+
+# 13c. 合法包：预检通过签发一次性令牌；错令牌 / 换文件被拒；确认后整体替换
+out = precheck_package(pkg_text)
+assert out["ok"] and out["token"] and out["warnings"]
+token = out["token"]
+try:
+    confirm_import(pkg_text, "错令牌")
+    raise AssertionError("错误令牌应被拒绝")
+except MigrationConfirmError:
+    pass
+other = _json.loads(pkg_text)
+other["data"]["dict"] = other["data"]["dict"][:-1]
+other["counts"]["dict"] -= 1
+other["sha256"] = package_digest(other)
+try:
+    confirm_import(_json.dumps(other, ensure_ascii=False), token)
+    raise AssertionError("摘要不匹配应被拒绝")
+except MigrationConfirmError:
+    pass
+db.upsert_entry("临时原料", ["芥末"])  # 导入后应被整体替换掉
+res = confirm_import(pkg_text, token)
+assert res["ok"] and res["imported"] == pkg_a["counts"]
+assert res["sha256"] == pkg_a["sha256"]
+assert "临时原料" not in {e["ingredient"] for e in db.list_dict()}
+try:
+    confirm_import(pkg_text, token)  # 一次性：令牌已消费
+    raise AssertionError("令牌复用应被拒绝")
+except MigrationConfirmError:
+    pass
+# 往返稳定：再导出摘要与原始一致；记录数不变
+assert build_export()["sha256"] == pkg_a["sha256"]
+assert len(db.list_reviews()) == 6
+print("13. 审查数据迁移包（导出稳定/规范化摘要/只读预检/逐项问题/一次性令牌/整体替换/往返一致） OK")
+
 print("\n全部集成冒烟测试通过 ✔")

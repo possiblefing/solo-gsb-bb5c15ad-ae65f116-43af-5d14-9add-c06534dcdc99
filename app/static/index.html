@@ -336,6 +336,33 @@
   <div id="history-table"><p class="hint">暂无记录</p></div>
 </section>
 
+<section>
+  <h2>⑫ 审查数据迁移包</h2>
+  <p class="hint">把字典、原料别名与全部审查记录打包为一个 JSON 迁移包：含格式版本号与按规范化内容
+    计算的 SHA-256 摘要，同一数据库重复导出内容稳定（摘要一致）。导入先做<b>只读预检</b>——逐项校验
+    版本 / 摘要 / 字段类型 / 别名图无环 / 审查记录结构，<b>不会写库</b>；预检通过后凭
+    <b>绑定该文件摘要的一次性确认令牌</b>确认导入，在单个事务内整体替换，任一步失败自动回滚。</p>
+  <h3>导出</h3>
+  <div class="toolbar">
+    <button onclick="exportMigration()">生成并下载迁移包</button>
+    <span id="mig-export-msg" class="hint"></span>
+  </div>
+  <div id="mig-export-info"></div>
+  <h3>导入</h3>
+  <p class="warn">⚠ 导入将<b>整体替换</b>当前字典、别名与全部审查记录，且不可撤销；请先导出备份。</p>
+  <input type="file" id="mig-file" accept=".json,application/json" style="font-size:13px">
+  <div class="toolbar">
+    <button onclick="precheckMigration()">只读预检</button>
+    <span id="mig-msg" class="error"></span>
+  </div>
+  <div id="mig-precheck"></div>
+  <div id="mig-confirm-wrap" class="hidden" style="margin-top:10px">
+    <button class="danger" onclick="confirmMigrationImport()">确认导入（整体替换现有数据）</button>
+    <span class="hint" id="mig-confirm-hint"></span>
+  </div>
+  <div id="mig-import-result"></div>
+</section>
+
 </main>
 
 <script>
@@ -1762,6 +1789,124 @@ function fillPanelDemo() {
     + '尊享全包：30.00：麸质谷物，乳，大豆，蛋类，坚果，芝麻\n'
     + '鱼贝类单项：8.00：鱼类，甲壳类';
   $('panel-msg').textContent = '示例已填充：选择一条含乳/大豆/蛋类/麸质谷物的记录后计算，可看到精确比价与覆盖贡献';
+}
+
+/* ---------- 审查数据迁移包 ---------- */
+let migToken = null;
+let migText = null;
+
+const MIG_SECTION_LABEL = {package: '迁移包', dict: '字典', aliases: '别名', reviews: '审查记录'};
+
+function migCountsHtml(counts) {
+  return counts
+    ? `字典 <b>${counts.dict}</b> 条 · 别名 <b>${counts.aliases}</b> 条 · 审查记录 <b>${counts.reviews}</b> 条`
+    : '<span class="hint">未知</span>';
+}
+
+async function exportMigration() {
+  $('mig-export-msg').textContent = '';
+  try {
+    const res = await fetch('/api/migration/export');
+    if (!res.ok) throw new Error(res.statusText);
+    const text = await res.text();
+    const pkg = JSON.parse(text);
+    $('mig-export-info').innerHTML = `<div class="result-block">
+      <p>数据量：${migCountsHtml(pkg.counts)}<br>
+         格式版本：<b>v${pkg.version}</b> · SHA-256：<code>${esc(pkg.sha256)}</code></p>
+      <p class="hint">同一数据库重复导出内容稳定（摘要一致）；导入其他实例后再导出摘要也不变。</p></div>`;
+    const blob = new Blob([text], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `allergen_migration_${pkg.sha256.slice(0, 12)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    $('mig-export-msg').textContent = '迁移包已生成并开始下载';
+  } catch (e) {
+    $('mig-export-msg').textContent = '导出失败：' + e.message;
+  }
+}
+
+async function precheckMigration() {
+  $('mig-msg').textContent = '';
+  $('mig-precheck').innerHTML = '';
+  $('mig-import-result').innerHTML = '';
+  $('mig-confirm-wrap').classList.add('hidden');
+  migToken = null;
+  migText = null;
+  const file = $('mig-file').files[0];
+  if (!file) {
+    $('mig-msg').textContent = '请先选择迁移包 JSON 文件';
+    return;
+  }
+  const text = await file.text();
+  try {
+    const r = await post('/api/migration/precheck', {text});
+    renderMigPrecheck(r, file.name);
+    if (r.ok) {
+      migToken = r.token;
+      migText = text;
+    }
+  } catch (e) {
+    $('mig-msg').textContent = e.message;
+  }
+}
+
+function renderMigPrecheck(r, fname) {
+  let html = `<div class="result-block"><h3>预检结果（${esc(fname)}）
+    ${r.ok ? '<span class="pill green">通过</span>' : '<span class="pill red">未通过</span>'}</h3>`;
+  html += `<p>包内数据量：${migCountsHtml(r.counts)}<br>
+             当前库数据量：${migCountsHtml(r.current_counts)}`;
+  if (r.sha256) html += `<br>SHA-256：<code>${esc(r.sha256)}</code>`;
+  html += '</p>';
+  if (r.problems && r.problems.length) {
+    const rows = r.problems.map(p => `<tr>
+      <td>${esc(MIG_SECTION_LABEL[p.section] || p.section)}</td>
+      <td>${p.index === null || p.index === undefined ? '—' : '第 ' + (p.index + 1) + ' 条'}</td>
+      <td><code>${esc(p.type)}</code></td>
+      <td class="error">${esc(p.message)}</td></tr>`).join('');
+    html += `<h4 style="color:var(--red)">发现 ${r.problems.length} 个问题（预检只读，未写库）</h4>
+      <table><tr><th style="width:6em">部分</th><th style="width:6em">位置</th>
+      <th style="width:9em">类型</th><th>问题</th></tr>${rows}</table>
+      <p class="hint">修正全部问题后重新预检。</p>`;
+  }
+  if (r.ok && r.warnings && r.warnings.length) {
+    html += `<h4>警告（${r.warnings.length}）</h4>
+      <ul>${r.warnings.map(w => `<li class="warn">⚠ ${esc(w)}</li>`).join('')}</ul>`;
+  }
+  html += '</div>';
+  $('mig-precheck').innerHTML = html;
+  if (r.ok) {
+    $('mig-confirm-wrap').classList.remove('hidden');
+    $('mig-confirm-hint').textContent =
+      `确认令牌 ${Math.round(r.expires_in / 60)} 分钟内有效、仅可使用一次，且仅绑定该文件摘要`;
+  }
+}
+
+async function confirmMigrationImport() {
+  if (!migToken || !migText) return;
+  if (!confirm('确认导入？当前字典、别名与全部审查记录将被整体替换，且不可撤销。')) return;
+  try {
+    const r = await post('/api/migration/import', {token: migToken, text: migText});
+    $('mig-confirm-wrap').classList.add('hidden');
+    $('mig-import-result').innerHTML = `<div class="recheck-bar"
+      style="border-color:#86efac;background:#f0fdf4">✅ <b style="color:var(--green)">导入完成：</b>
+      字典 ${r.imported.dict} 条、别名 ${r.imported.aliases} 条、审查记录 ${r.imported.reviews} 条
+      （SHA-256 <code>${esc(r.sha256.slice(0, 12))}…</code>），页面数据已刷新。</div>`;
+    migToken = null;
+    migText = null;
+    $('mig-file').value = '';
+    currentReviewId = null;
+    $('result-section').classList.add('hidden');
+    await loadDict();
+    await loadAliases();
+    await loadHistory();
+  } catch (e) {
+    $('mig-import-result').innerHTML =
+      `<p class="error">导入失败：${esc(e.message)}（未写入任何数据，请重新预检）</p>`;
+    $('mig-confirm-wrap').classList.add('hidden');
+    migToken = null;
+    migText = null;
+  }
 }
 
 /* ---------- 示例 ---------- */
