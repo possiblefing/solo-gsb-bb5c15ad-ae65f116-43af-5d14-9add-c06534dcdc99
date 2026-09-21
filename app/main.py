@@ -10,7 +10,10 @@
 - 生成并导出标签审查报告（HTML / Markdown）；
 - 临时预览工具：供应商方案风险区间、配料占比区间顺序校验、共线生产换线
   排程、共用标签模板分组、目标过敏原最小改配方案、过敏原检测套餐规划
-  （只读，不写历史、不改写审查记录）。
+  （只读，不写历史、不改写审查记录）；
+- 审查数据迁移包：全量 JSON 导出（含格式版本与规范化 SHA-256 摘要，
+  同库重复导出稳定）、只读预检（版本/摘要/字段类型/别名图无环/记录结构，
+  不写库）与绑定文件摘要的一次性令牌确认，在单个 SQLite 事务内整体替换。
 """
 from __future__ import annotations
 
@@ -22,7 +25,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from . import db
+from . import db, migration
 from .aliases import resolve_preview, validate_alias_batch
 from .allergen_panel import PanelError, build_panel_preview, list_panel_records
 from .analysis import flatten, normalize_name
@@ -132,6 +135,15 @@ class ReformulationPreview(BaseModel):
 class PanelPreview(BaseModel):
     review_id: int
     packages_text: str = ""
+
+
+class MigrationImport(BaseModel):
+    package: dict
+
+
+class MigrationConfirm(BaseModel):
+    package: dict
+    token: str
 
 
 # ---------- 页面 ----------
@@ -499,3 +511,71 @@ def review_report(rid: int, format: str = Query("html", pattern="^(html|md)$")):
         headers={"Content-Disposition":
                  f'attachment; filename="allergen_review_{rid}.html"'},
     )
+
+
+# ---------- 审查数据迁移包（全量导出 / 预检 / 一次性令牌确认导入） ----------
+
+@app.get("/api/migration/counts")
+def migration_counts():
+    """当前库数据量（字典 / 别名 / 审查记录）。"""
+    return {"counts": db.current_counts()}
+
+
+@app.get("/api/migration/export")
+def migration_export():
+    """全量导出迁移包（JSON 下载）。
+
+    包含字典、别名、全部审查记录、格式版本与按规范化内容计算的
+    SHA-256 摘要；同一数据库内容重复导出逐字节稳定（无导出时间等
+    易变字段，列表按稳定键排序）。
+    """
+    snapshot = db.list_all_data()
+    package = migration.build_package(**snapshot)
+    return Response(
+        migration.serialize_package(package),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition":
+                 'attachment; filename="allergen_review_migration.json"'},
+    )
+
+
+@app.post("/api/migration/precheck")
+def migration_precheck(payload: MigrationImport):
+    """迁移包只读预检：校验版本、SHA-256 摘要、字段类型、别名图无环及
+    审查记录结构。
+
+    **绝不写库**：逐项返回阻断问题 problems 与非阻断警告 warnings；
+    通过后签发绑定该文件摘要的一次性令牌 token，供确认导入使用。
+    HTTP 恒为 200，预检结论看响应体的 ok。
+    """
+    outcome = migration.precheck(
+        payload.package, current_counts=db.current_counts())
+    return outcome
+
+
+@app.post("/api/migration/import")
+def migration_import(payload: MigrationConfirm):
+    """凭一次性令牌确认导入。
+
+    先重新只读预检并校验 / 消费绑定当前文件摘要的令牌（令牌一次性，
+    文件改动导致摘要变化即拒绝），然后在**单个 SQLite 事务**内整体
+    替换字典、别名与审查记录；事务中任一步失败都整体回滚，
+    替换前的数据保持不变。
+    """
+    outcome = migration.validate_package(payload.package)
+    if not outcome["ok"]:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "迁移包预检未通过，未写入任何数据",
+                    "problems": outcome["problems"],
+                    "warnings": outcome["warnings"]})
+    # 令牌消费（pop）先于写库：一次性，且只绑定当前文件摘要
+    try:
+        migration.tokens.consume(payload.token, outcome["digest"])
+    except migration.TokenError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)})
+    dictionary, aliases, reviews = migration.normalized_rows(payload.package)
+    counts = db.replace_all_data(dictionary, aliases, reviews)
+    return {"ok": True, "counts": counts,
+            "digest": outcome["digest"],
+            "warnings": outcome["warnings"]}

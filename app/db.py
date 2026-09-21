@@ -314,3 +314,116 @@ def list_reviews() -> List[dict]:
 def delete_review(rid: int) -> None:
     with _lock, _connect() as conn:
         conn.execute("DELETE FROM reviews WHERE id = ?", (rid,))
+
+
+# ---------- 审查数据迁移包：全量导出 / 单事务整体替换 ----------
+
+def current_counts() -> dict:
+    """当前库三张表的数据量，供迁移页展示与导入前风险提示。"""
+    with _lock, _connect() as conn:
+        return {
+            "dictionary": conn.execute(
+                "SELECT COUNT(*) FROM allergen_dict").fetchone()[0],
+            "aliases": conn.execute(
+                "SELECT COUNT(*) FROM ingredient_aliases").fetchone()[0],
+            "reviews": conn.execute(
+                "SELECT COUNT(*) FROM reviews").fetchone()[0],
+        }
+
+
+def list_all_data() -> dict:
+    """导出用全量数据快照：字典、别名、全部审查记录（含原始字段与指纹）。
+
+    审查记录直接走 :func:`_row_to_review`，不附加即时计算的
+    needs_recheck 状态、也不改写库内 JSON（不触发旧记录来源补齐）。
+    """
+    with _lock, _connect() as conn:
+        dict_rows = conn.execute(
+            "SELECT ingredient, allergens, updated_at FROM allergen_dict "
+            "ORDER BY ingredient").fetchall()
+        alias_rows = conn.execute(
+            "SELECT alias_name, target_name FROM ingredient_aliases "
+            "ORDER BY alias_name").fetchall()
+        review_rows = conn.execute(
+            "SELECT * FROM reviews ORDER BY id").fetchall()
+    return {
+        "dictionary": [{"ingredient": r["ingredient"],
+                        "allergens": json.loads(r["allergens"]),
+                        "updated_at": r["updated_at"]} for r in dict_rows],
+        "aliases": [{"alias": r["alias_name"], "target": r["target_name"]}
+                    for r in alias_rows],
+        "reviews": [_row_to_review(r) for r in review_rows],
+    }
+
+
+def replace_all_data(dictionary: List[dict], aliases: List[dict],
+                     reviews: List[dict]) -> dict:
+    """在**单个 SQLite 事务**内用迁移包整体替换全部数据。
+
+    先清空三张表，再写入包内字典 / 别名 / 审查记录（审查记录保留包内
+    原 ID 与创建时间），最后把 reviews 自增序列拨到 max(id)，使后续
+    新建记录从其后继续编号。任一步 INSERT / 约束失败都整体回滚，
+    替换前的数据保持不变。返回写入条数。
+    """
+    now = _now()
+    with _lock:
+        conn = _connect()
+        conn.isolation_level = None  # 关闭模块自动事务，显式 BEGIN/COMMIT
+        try:
+            conn.execute("BEGIN")
+            conn.execute("DELETE FROM allergen_dict")
+            conn.execute("DELETE FROM ingredient_aliases")
+            conn.execute("DELETE FROM reviews")
+
+            for e in dictionary:
+                conn.execute(
+                    "INSERT INTO allergen_dict (ingredient, allergens, updated_at) "
+                    "VALUES (?, ?, ?)",
+                    (e["ingredient"],
+                     json.dumps(e["allergens"], ensure_ascii=False), now))
+
+            seen_alias: Set[str] = set()
+            for a in aliases:
+                key = normalize_name(a["alias"])
+                if key in seen_alias:
+                    continue
+                seen_alias.add(key)
+                conn.execute(
+                    "INSERT INTO ingredient_aliases "
+                    "(alias_key, alias_name, target_key, target_name, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (key, a["alias"], normalize_name(a["target"]),
+                     a["target"], now))
+
+            for r in reviews:
+                conn.execute(
+                    "INSERT INTO reviews (id, name, declared, text_a, text_b, "
+                    "label_a, label_b, result, created_at, dict_fingerprint) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (r["id"], r["name"],
+                     json.dumps(r["declared"], ensure_ascii=False),
+                     r["text_a"], r["text_b"], r["label_a"], r["label_b"],
+                     json.dumps(r["result"], ensure_ascii=False),
+                     r["created_at"], r["dict_fingerprint"]))
+
+            # 显式 ID 写入后校正自增序列：空表归零，否则下一条为 max(id)+1
+            # sqlite_sequence 在首次 AUTOINCREMENT 插入前可能尚不存在
+            has_seq = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='sqlite_sequence'").fetchone()
+            if has_seq:
+                conn.execute(
+                    "DELETE FROM sqlite_sequence WHERE name = 'reviews'")
+            if reviews:
+                conn.execute(
+                    "INSERT INTO sqlite_sequence (name, seq) "
+                    "VALUES ('reviews', ?)",
+                    (max(r["id"] for r in reviews),))
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+    return {"dictionary": len(dictionary), "aliases": len(aliases),
+            "reviews": len(reviews)}

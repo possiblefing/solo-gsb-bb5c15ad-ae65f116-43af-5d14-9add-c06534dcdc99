@@ -336,6 +336,38 @@
   <div id="history-table"><p class="hint">暂无记录</p></div>
 </section>
 
+<section>
+  <h2>⑫ 审查数据迁移包（备份 / 全量替换）</h2>
+  <p class="hint">把当前库的<b>过敏原字典、原料别名、全部审查记录</b>全量导出为单个 JSON 文件，
+    文件内含格式版本与按规范化内容计算的 <b>SHA-256</b> 摘要——同一数据库重复导出内容<b>逐字节一致</b>。
+    导入分两步：先 <b>① 只读预检</b>（校验版本、摘要、字段类型、别名图无环、审查记录结构），预检阶段<b>不写库</b>；
+    通过后再凭绑定该文件摘要的<b>一次性令牌</b>点 <b>② 确认导入</b>，系统在单个 SQLite 事务内<b>整体替换</b>
+    现有数据，任一步失败都会回滚，原有数据保持不变。</p>
+  <div id="migration-counts"><p class="hint">当前数据量加载中…</p></div>
+  <div class="toolbar">
+    <a class="link" href="/api/migration/export"
+       onclick="setTimeout(loadMigrationCounts, 600)">⬇ 导出全量迁移包（JSON）</a>
+  </div>
+  <div class="result-block">
+    <h3>从迁移包导入</h3>
+    <div class="recheck-bar">
+      ⚠ <b>备份与覆盖风险：</b>确认导入会用文件内容<b>整体替换</b>当前库——现有字典、别名与全部审查记录
+      将被覆盖为文件中的数据，<b>不可逐行撤销</b>。请先用上方导出链接备份当前数据，并核对预检给出的数据量。
+    </div>
+    <label>选择迁移包文件（.json，由本系统导出）</label>
+    <input type="file" id="migration-file" accept="application/json,.json"
+           style="font-size:13.5px" onchange="onMigrationFileChange()">
+    <div class="toolbar">
+      <button onclick="migrationPrecheck()">① 只读预检（不写库）</button>
+      <button id="migration-confirm-btn" class="danger" disabled
+              onclick="migrationConfirm()">② 确认导入（整体替换）</button>
+      <span id="migration-msg" class="error"></span>
+    </div>
+    <div id="migration-precheck"></div>
+    <div id="migration-result"></div>
+  </div>
+</section>
+
 </main>
 
 <script>
@@ -1776,6 +1808,174 @@ async function fillDemo() {
   });
   $('dict-msg').textContent = '示例已填充，点击“开始审查”查看效果';
 }
+
+/* ---------- ⑫ 审查数据迁移包 ---------- */
+let migrationPackage = null;
+let migrationDigest = null;
+let migrationToken = null;
+
+async function loadMigrationCounts() {
+  try {
+    const {counts} = await api('/api/migration/counts');
+    $('migration-counts').innerHTML =
+      `<table style="max-width:560px"><tr>
+        <th>过敏原字典</th><th>原料别名</th><th>审查记录</th></tr><tr>
+        <td>${counts.dictionary} 条</td><td>${counts.aliases} 条</td>
+        <td>${counts.reviews} 条</td></tr></table>`;
+  } catch (e) {
+    $('migration-counts').innerHTML =
+      `<p class="error">数据量加载失败：${esc(e.message)}</p>`;
+  }
+}
+
+function resetMigrationPrecheck(keepFile) {
+  migrationToken = null;
+  migrationDigest = null;
+  if (!keepFile) migrationPackage = null;
+  $('migration-confirm-btn').disabled = true;
+  $('migration-precheck').innerHTML = '';
+  $('migration-result').innerHTML = '';
+  $('migration-msg').textContent = '';
+}
+
+function onMigrationFileChange() {
+  resetMigrationPrecheck(false);
+  const input = $('migration-file');
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let pkg;
+    try {
+      pkg = JSON.parse(reader.result);
+    } catch (e) {
+      $('migration-msg').textContent = `文件不是合法 JSON：${e.message}`;
+      migrationPackage = null;
+      return;
+    }
+    if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
+      $('migration-msg').textContent = '迁移包必须是 JSON 对象';
+      migrationPackage = null;
+      return;
+    }
+    migrationPackage = pkg;
+    $('migration-msg').textContent =
+      `已选择文件「${file.name}」（${(file.size / 1024).toFixed(1)} KB），请先执行只读预检。`;
+  };
+  reader.onerror = () => {
+    $('migration-msg').textContent = '文件读取失败';
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+async function migrationPrecheck() {
+  $('migration-msg').textContent = '';
+  $('migration-precheck').innerHTML = '<p class="hint">预检中…</p>';
+  $('migration-result').innerHTML = '';
+  if (!migrationPackage) {
+    $('migration-precheck').innerHTML = '';
+    $('migration-msg').textContent = '请先选择迁移包 JSON 文件';
+    return;
+  }
+  try {
+    const r = await post('/api/migration/precheck', {package: migrationPackage});
+    renderPrecheck(r);
+  } catch (e) {
+    $('migration-precheck').innerHTML = '';
+    $('migration-msg').textContent = '预检请求失败：' + e.message;
+  }
+}
+
+function migrationNoticeList(items, cls) {
+  if (!items || !items.length) return '';
+  return `<ul style="margin:6px 0;padding-left:20px;line-height:1.8" class="${cls}">`
+    + items.map(x => `<li>[${esc(x.scope)}] ${esc(x.message)}</li>`).join('')
+    + '</ul>';
+}
+
+function renderPrecheck(r) {
+  migrationToken = r.token || null;
+  migrationDigest = r.digest || null;
+  const c = r.counts;
+  let html = `<div class="result-block">
+    <h3>只读预检结果
+      <span class="pill ${r.ok ? 'green' : 'red'}">${r.ok ? '通过 · 未写库' : '未通过 · 未写库'}</span>
+    </h3>
+    <table style="max-width:560px"><tr><th>字典</th><th>别名</th><th>审查记录</th></tr><tr>
+      <td>${c.dictionary} 条</td><td>${c.aliases} 条</td><td>${c.reviews} 条</td></tr></table>
+    <p class="hint">文件内容 SHA-256：<code title="${esc(r.digest || '')}">${esc((r.digest || '').slice(0, 16))}…</code></p>`;
+  if (r.problems && r.problems.length) {
+    html += `<p class="error" style="margin-top:8px">发现 ${r.problems.length} 个阻断问题，
+      已逐项列出；<b>预检不会写库</b>，请修正文件后重新预检：</p>`
+      + migrationNoticeList(r.problems, 'error');
+  }
+  if (r.warnings && r.warnings.length) {
+    html += `<p class="warn" style="margin-top:8px">${r.warnings.length} 条警告（不阻断导入，请自行确认风险）：</p>`
+      + migrationNoticeList(r.warnings, 'warn');
+  }
+  if (r.ok) {
+    html += `<p style="margin-top:8px">✅ 版本、摘要、字段类型、别名图无环与审查记录结构全部通过。
+      已签发绑定该文件摘要的<b>一次性令牌</b>，点击上方「② 确认导入」即在单个事务内整体替换当前数据；
+      重新预检会更换令牌，确认后令牌立即失效。</p>`;
+  }
+  html += '</div>';
+  $('migration-precheck').innerHTML = html;
+  $('migration-confirm-btn').disabled = !r.ok;
+}
+
+async function migrationConfirm() {
+  if (!migrationPackage || !migrationToken) {
+    $('migration-msg').textContent = '请先通过只读预检取得一次性令牌';
+    return;
+  }
+  if (!window.confirm('确认导入将整体替换当前库的全部字典、别名与审查记录，且不可逐行撤销。\n'
+      + '建议已事先导出备份。是否继续？')) {
+    return;
+  }
+  $('migration-msg').textContent = '';
+  $('migration-result').innerHTML = '<p class="hint">导入中（单事务整体替换）…</p>';
+  try {
+    const r = await post('/api/migration/import',
+      {package: migrationPackage, token: migrationToken});
+    // 导入成功：令牌已消费、文件选择复位，刷新页面上全部数据视图
+    $('migration-file').value = '';
+    resetMigrationPrecheck(false);
+    renderImportResult(r);
+    await loadMigrationCounts();
+    await loadDict();
+    await loadAliases();
+    await loadHistory();
+  } catch (e) {
+    const detail = e.detail || {};
+    let html = '<p class="error">导入失败，事务已回滚，原有数据保持不变：'
+      + esc(e.message) + '</p>';
+    if (detail.problems && detail.problems.length) {
+      html += migrationNoticeList(detail.problems, 'error');
+    }
+    $('migration-result').innerHTML = html;
+    // 令牌在确认时已一次性消费，需要重新预检才能再次确认
+    $('migration-confirm-btn').disabled = true;
+    migrationToken = null;
+  }
+}
+
+function renderImportResult(r) {
+  const c = r.counts;
+  let html = `<div class="result-block">
+    <h3>导入结果 <span class="pill green">成功 · 已整体替换</span></h3>
+    <table style="max-width:560px"><tr><th>字典</th><th>别名</th><th>审查记录</th></tr><tr>
+      <td>${c.dictionary} 条</td><td>${c.aliases} 条</td><td>${c.reviews} 条</td></tr></table>
+    <p class="hint">文件内容 SHA-256：<code title="${esc(r.digest || '')}">${esc((r.digest || '').slice(0, 16))}…</code></p>`;
+  if (r.warnings && r.warnings.length) {
+    html += `<p class="warn">${r.warnings.length} 条导入警告：</p>`
+      + migrationNoticeList(r.warnings, 'warn');
+  }
+  html += '</div>';
+  $('migration-result').innerHTML = html;
+  $('migration-result').scrollIntoView({behavior: 'smooth'});
+}
+
+loadMigrationCounts();
 
 loadDict().then(() => Promise.all([loadHistory(), loadAliases()]))
   .catch(e => alert('初始化失败：' + e.message));
